@@ -1,0 +1,106 @@
+services:
+  redis:
+    image: redis:alpine
+    container_name: redis-server
+    networks:
+      - my_network
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    container_name: app-server
+    networks:
+      - my_network
+    ports:
+      - "3000:3000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - WS_HOST=websocket
+      - WS_PORT=9000
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      - redis  # Tạm bỏ websocket để debug
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+  websocket:
+    build:
+      context: .
+      dockerfile: Dockerfile.websocket
+    container_name: websocket-server
+    networks:
+      - my_network
+    ports:
+      - "9000:9000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
+      - WS_PORT=9000
+      - WS_MAX_CLIENTS=100
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    networks:
+      - my_network
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    networks:
+      - my_network
+    ports:
+      - "3001:3000"
+    volumes:
+    - ./grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  
+networks:
+  my_network:
+    driver: bridge
+
+volumes:
+  grafana-data:
+  redis-data:
+  logs:

@@ -1,0 +1,153 @@
+[2025-03-27 05:24:16] [INFO] WebSocket server chạy trên port 8080
+[2025-03-27 05:28:59] [INFO] WebSocket server chạy trên port 8080
+[2025-03-27 05:44:37] [ERROR] unhandledRejection: (no error message)
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1712:7)
+[2025-03-27 05:46:44] [ERROR] unhandledRejection: (no error message)
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1712:7)
+[2025-03-27 06:04:41] [INFO] WebSocket server chạy trên port 8080
+[2025-03-27 06:04:41] [WARN] Port 8080 đã bị chiếm
+[2025-03-27 06:04:41] [INFO] WebSocket server chạy trên port 8081
+[2025-03-27 06:04:41] [WARN] Port 8080 đã bị chiếm
+[2025-03-27 06:04:41] [INFO] WebSocket server chạy trên port 8082
+[2025-03-27 06:04:41] [INFO] NotificationService initialized
+[2025-03-27 06:04:41] [INFO] Khởi tạo evm với ví: 0xf9910F58dC025cc16Ab7e90e4821F5c1837FE301
+[2025-03-27 06:04:41] [INFO] BaseSnipeBot multi-chain đã khởi tạo
+[2025-03-27 06:04:41] [INFO] TransactionService đã khởi tạo
+[2025-03-27 16:33:03] [INFO] WebSocket server chạy trên port 8080
+[2025-03-27 16:33:04] [WARN] Port 8080 đã bị chiếm
+[2025-03-27 16:33:04] [INFO] WebSocket server chạy trên port 8081
+[2025-03-27 16:33:04] [INFO] NotificationService initialized
+[2025-03-27 16:33:04] [INFO] Khởi tạo evm với ví: 0xf9910F58dC025cc16Ab7e90e4821F5c1837FE301
+[2025-03-27 16:33:04] [INFO] BaseSnipeBot multi-chain đã khởi tạo
+[2025-03-27 16:33:04] [INFO] TransactionService đã khởi tạo
+[2025-03-27 16:33:04] [WARN] Port 8080 đã bị chiếm
+[2025-03-27 16:33:04] [INFO] WebSocket server chạy trên port 8082
+[2025-03-27 16:33:04] [INFO] NotificationService initialized
+[2025-03-27 16:49:24] [ERROR] unhandledRejection: (no error message)
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1712:7)
+[2025-03-27 16:53:37] [ERROR] unhandledRejection: (no error message)
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1712:7)
+[2025-03-27 16:59:30] [INFO] NotificationService initialized
+[2025-03-27 16:59:30] [INFO] Khởi tạo evm với ví: 0xf9910F58dC025cc16Ab7e90e4821F5c1837FE301
+[2025-03-27 16:59:30] [INFO] BaseSnipeBot multi-chain đã khởi tạo
+[2025-03-27 16:59:30] [INFO] TransactionService đã khởi tạo
+[2025-03-27 16:59:30] [INFO] Redis connected on redis://localhost:6379
+[2025-03-27 16:59:30] [INFO] Redis connected on redis://localhost:6379
+[2025-03-27 16:59:30] [WARN] Port 9000 đã bị chiếm
+[2025-03-27 16:59:30] [INFO] Redis connected on redis://localhost:6379
+[2025-03-27 16:59:30] [WARN] Port 9000 đã bị chiếm
+[2025-03-27 16:59:30] [INFO] WebSocket server chạy trên port 9000
+[2025-03-27 16:59:30] [INFO] WebSocket server chạy trên port 9001
+[2025-03-27 16:59:30] [INFO] WebSocket server chạy trên port 9002
+[2025-03-27 17:06:02] [INFO] Redis connected on redis://localhost:6379
+[2025-03-27 17:06:02] [INFO] Redis connected on redis://localhost:6379
+[2025-03-27 17:06:02] [WARN] Port 9000 đã bị chiếm
+[2025-03-27 17:06:02] [INFO] Redis connected on redis://localhost:6379
+[2025-03-27 17:06:02] [WARN] Port 9000 đã bị chiếm
+[2025-03-27 17:06:02] [INFO] NotificationService initialized
+[2025-03-27 17:06:02] [INFO] Khởi tạo evm với ví: 0xf9910F58dC025cc16Ab7e90e4821F5c1837FE301
+[2025-03-27 17:06:02] [INFO] BaseSnipeBot multi-chain đã khởi tạo
+[2025-03-27 17:06:02] [INFO] TransactionService đã khởi tạo
+[2025-03-27 17:06:02] [INFO] WebSocket server chạy trên port 9000
+[2025-03-27 17:06:02] [INFO] WebSocket server chạy trên port 9001
+[2025-03-27 17:06:02] [INFO] WebSocket server chạy trên port 9002
+[2025-03-27 17:06:02] [INFO] NotificationService initialized
+[2025-03-27 17:11:07] [INFO] NotificationService initialized
+[2025-03-27 17:11:07] [INFO] Khởi tạo evm với ví: 0xf9910F58dC025cc16Ab7e90e4821F5c1837FE301
+[2025-03-27 17:11:07] [INFO] BaseSnipeBot multi-chain đã khởi tạo
+[2025-03-27 17:11:07] [INFO] TransactionService đã khởi tạo
+[2025-03-27 17:11:07] [INFO] Redis connected on redis://localhost:6379
+[2025-03-27 17:11:07] [INFO] WebSocket server chạy trên port 9000
+[2025-03-27 17:11:07] [INFO] NotificationService initialized
+[2025-03-27 17:35:12] [ERROR] Redis connect error: 
+[2025-03-27 17:38:37] [INFO] Redis connected on redis://localhost:6379
+[2025-03-27 17:38:37] [INFO] NotificationService initialized
+[2025-03-27 17:38:37] [INFO] Khởi tạo evm với ví: 0xf9910F58dC025cc16Ab7e90e4821F5c1837FE301
+[2025-03-27 17:38:37] [INFO] BaseSnipeBot multi-chain đã khởi tạo
+[2025-03-27 17:38:37] [INFO] TransactionService đã khởi tạo
+[2025-03-27 17:38:37] [INFO] WebSocket server chạy trên port 9000
+[2025-03-27 17:38:37] [INFO] NotificationService initialized
+[2025-03-27 18:22:32] [INFO] Redis connected on redis://localhost:6379
+[2025-03-27 18:22:32] [INFO] NotificationService initialized
+[2025-03-27 18:22:32] [INFO] Khởi tạo evm với ví: 0xf9910F58dC025cc16Ab7e90e4821F5c1837FE301
+[2025-03-27 18:22:32] [INFO] BaseSnipeBot multi-chain đã khởi tạo
+[2025-03-27 18:22:32] [INFO] TransactionService đã khởi tạo
+[2025-03-27 18:22:32] [INFO] WebSocket server chạy trên port 9000
+[2025-03-27 18:22:32] [INFO] NotificationService initialized
+[2025-03-27 18:22:32] [INFO] API chạy trên port 3000
+[2025-03-27 18:22:32] [INFO] Notification sent: Bot đã khởi động
+[2025-03-27 18:22:32] [INFO] BotController đã khởi động
+[2025-03-27 18:30:21] [INFO] NotificationService initialized
+[2025-03-27 18:30:22] [INFO] Khởi tạo evm với ví: 0xf9910F58dC025cc16Ab7e90e4821F5c1837FE301
+[2025-03-27 18:30:22] [INFO] BaseSnipeBot multi-chain đã khởi tạo
+[2025-03-27 18:30:22] [INFO] TransactionService đã khởi tạo
+[2025-03-27 18:30:22] [INFO] Redis connected on redis://localhost:6379
+[2025-03-27 18:30:22] [INFO] WebSocket server chạy trên port 9000
+[2025-03-27 18:30:22] [INFO] NotificationService initialized
+[2025-03-27 18:30:22] [INFO] API chạy trên port 3000
+[2025-03-27 18:30:22] [INFO] Notification sent: Bot đã khởi động
+[2025-03-27 18:30:22] [INFO] BotController đã khởi động
+[2025-03-27 18:36:27] [INFO] Redis connected on redis://localhost:6379
+[2025-03-27 18:36:27] [INFO] NotificationService initialized
+[2025-03-27 18:36:27] [INFO] Khởi tạo evm với ví: 0xf9910F58dC025cc16Ab7e90e4821F5c1837FE301
+[2025-03-27 18:36:27] [INFO] BaseSnipeBot multi-chain đã khởi tạo
+[2025-03-27 18:36:27] [INFO] TransactionService đã khởi tạo
+[2025-03-27 18:36:27] [INFO] WebSocket server chạy trên port 9000
+[2025-03-27 18:36:27] [INFO] NotificationService initialized
+[2025-03-27 18:36:27] [INFO] API chạy trên port 3000
+[2025-03-27 18:36:27] [INFO] Notification sent: Bot đã khởi động
+[2025-03-27 18:36:27] [INFO] BotController đã khởi động
+[2025-03-27 18:39:43] [INFO] NotificationService initialized
+[2025-03-27 18:39:43] [INFO] Khởi tạo evm với ví: 0xf9910F58dC025cc16Ab7e90e4821F5c1837FE301
+[2025-03-27 18:39:43] [INFO] BaseSnipeBot multi-chain đã khởi tạo
+[2025-03-27 18:39:43] [INFO] TransactionService đã khởi tạo
+[2025-03-27 18:39:43] [INFO] Redis connected on redis://localhost:6379
+[2025-03-27 18:39:43] [INFO] WebSocket server chạy trên port 9000
+[2025-03-27 18:39:43] [INFO] NotificationService initialized
+[2025-03-27 18:39:43] [INFO] API chạy trên port 3000
+[2025-03-27 18:39:43] [INFO] Notification sent: Bot đã khởi động
+[2025-03-27 18:39:43] [INFO] BotController đã khởi động
+[2025-03-27 18:46:05] [INFO] NotificationService initialized
+[2025-03-27 18:46:05] [INFO] Khởi tạo evm với ví: 0xf9910F58dC025cc16Ab7e90e4821F5c1837FE301
+[2025-03-27 18:46:05] [INFO] BaseSnipeBot multi-chain đã khởi tạo
+[2025-03-27 18:46:05] [INFO] TransactionService đã khởi tạo
+[2025-03-27 18:46:05] [INFO] Redis connected on redis://localhost:6379
+[2025-03-27 18:46:05] [INFO] WebSocket server chạy trên port 9000
+[2025-03-27 18:46:05] [INFO] NotificationService initialized
+[2025-03-27 18:46:05] [INFO] API chạy trên port 3000
+[2025-03-27 18:46:05] [INFO] Notification sent: Bot đã khởi động
+[2025-03-27 18:46:05] [INFO] BotController đã khởi động
+[2025-03-27 19:03:17] [INFO] NotificationService initialized
+[2025-03-27 19:03:17] [INFO] Khởi tạo evm với ví: 0xf9910F58dC025cc16Ab7e90e4821F5c1837FE301
+[2025-03-27 19:03:17] [INFO] BaseSnipeBot multi-chain đã khởi tạo
+[2025-03-27 19:03:17] [INFO] TransactionService đã khởi tạo
+[2025-03-27 19:03:17] [INFO] Redis connected on redis://localhost:6379
+[2025-03-27 19:03:17] [INFO] WebSocket server chạy trên port 9000
+[2025-03-27 19:03:17] [INFO] NotificationService initialized
+[2025-03-27 19:03:17] [INFO] API chạy trên port 3000
+[2025-03-27 19:03:17] [INFO] Notification sent: Bot đã khởi động
+[2025-03-27 19:03:17] [INFO] BotController đã khởi động
+[2025-03-27 19:09:41] [INFO] NotificationService initialized
+[2025-03-27 19:09:41] [INFO] Khởi tạo evm với ví: 0xf9910F58dC025cc16Ab7e90e4821F5c1837FE301
+[2025-03-27 19:09:41] [INFO] BaseSnipeBot multi-chain đã khởi tạo
+[2025-03-27 19:09:41] [INFO] TransactionService đã khởi tạo
+[2025-03-27 19:09:41] [INFO] Redis connected on redis://localhost:6379
+[2025-03-27 19:09:41] [INFO] WebSocket server chạy trên port 9000
+[2025-03-27 19:09:41] [INFO] NotificationService initialized
+[2025-03-27 19:09:41] [INFO] API chạy trên port 3000
+[2025-03-27 19:09:41] [INFO] Notification sent: Bot đã khởi động
+[2025-03-27 19:09:41] [INFO] BotController đã khởi động
+[2025-03-27 19:28:24] [INFO] Redis đã kết nối thành công
+[2025-03-27 19:28:24] [INFO] Redis connected on redis://localhost:6379
+[2025-03-27 19:42:40] [INFO] Redis đã kết nối thành công
+[2025-03-27 19:42:40] [INFO] Redis connected on redis://localhost:6379
+[2025-03-27 19:56:52] [INFO] Redis đã kết nối thành công
+[2025-03-27 19:56:53] [INFO] Redis connected on redis://localhost:6379

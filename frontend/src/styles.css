@@ -1,0 +1,18 @@
+.app {
+  text-align: center;
+  padding: 20px;
+  min-height: 100vh;
+}
+input, select, button {
+  display: block;
+  margin: 10px auto;
+  padding: 8px;
+  width: 80%;
+  background-color: var(--tg-theme-secondary-bg-color, #f0f0f0);
+  color: var(--tg-theme-text-color, #000);
+  border: 1px solid var(--tg-theme-hint-color, #ccc);
+}
+button {
+  background-color: var(--tg-theme-button-color, #007bff);
+  color: var(--tg-theme-button-text-color, #fff);
+}

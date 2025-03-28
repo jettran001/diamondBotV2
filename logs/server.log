@@ -1,0 +1,31 @@
+[2025-03-27 22:24:14] [INFO] HTTP server running on port 9000
+[2025-03-27 22:24:14] [INFO] WebSocket server started on port 9000
+[2025-03-27 22:24:14] [INFO] Redis connected on redis://redis:6379
+[2025-03-27 22:24:19] [INFO] WebSocket client disconnected
+[2025-03-27 22:24:27] [INFO] WebSocket client disconnected
+[2025-03-27 22:24:35] [INFO] WebSocket client disconnected
+[2025-03-27 22:29:29] [INFO] HTTP server running on port 9000
+[2025-03-27 22:29:29] [INFO] WebSocket server started on port 9000
+[2025-03-27 22:29:29] [INFO] Redis connected on redis://redis:6379
+[2025-03-27 22:29:36] [INFO] WebSocket client disconnected
+[2025-03-27 22:29:45] [INFO] WebSocket client disconnected
+[2025-03-27 22:37:10] [INFO] HTTP server running on port 9000
+[2025-03-27 22:37:10] [INFO] WebSocket server started on port 9000
+[2025-03-27 22:37:10] [INFO] Redis connected on redis://redis:6379
+[2025-03-27 22:37:13] [INFO] WebSocket client disconnected
+[2025-03-27 22:37:17] [INFO] WebSocket client disconnected
+[2025-03-27 22:37:22] [INFO] WebSocket client disconnected
+[2025-03-27 22:37:26] [INFO] WebSocket client disconnected
+[2025-03-27 22:37:31] [INFO] WebSocket client disconnected
+[2025-03-27 22:37:36] [INFO] WebSocket client disconnected
+[2025-03-27 22:37:43] [INFO] WebSocket client disconnected
+[2025-03-27 22:37:54] [INFO] WebSocket client disconnected
+[2025-03-27 22:38:11] [INFO] WebSocket client disconnected
+[2025-03-27 22:38:41] [INFO] WebSocket client disconnected
+[2025-03-27 22:39:35] [INFO] WebSocket client disconnected
+[2025-03-27 22:40:38] [INFO] WebSocket client disconnected
+[2025-03-27 22:41:42] [INFO] WebSocket client disconnected
+[2025-03-27 22:42:47] [INFO] WebSocket client disconnected
+[2025-03-27 22:43:50] [INFO] WebSocket client disconnected
+[2025-03-27 22:44:54] [INFO] WebSocket client disconnected
+[2025-03-27 22:45:58] [INFO] WebSocket client disconnected

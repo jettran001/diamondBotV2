@@ -1,0 +1,180 @@
+[2025-03-27 22:24:27] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:24:35] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:29:36] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:29:45] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:29:46] [ERROR] uncaughtException: Socket closed unexpectedly
+Error: Socket closed unexpectedly
+    at Socket.<anonymous> (/app/node_modules/@redis/client/dist/lib/client/socket.js:194:118)
+    at Object.onceWrapper (node:events:639:26)
+    at Socket.emit (node:events:524:28)
+    at TCP.<anonymous> (node:net:343:12)
+[2025-03-27 22:37:13] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:37:17] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:37:22] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:37:26] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:37:31] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:37:36] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:37:43] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:37:54] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:38:11] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:38:41] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:39:35] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:40:38] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:41:42] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:42:47] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:43:50] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:44:54] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:45:58] [ERROR] uncaughtException: Cannot find module '/app/transactionWorker.js'
+Error: Cannot find module '/app/transactionWorker.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1212:15)
+    at Function._load (node:internal/modules/cjs/loader:1043:27)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at MessagePort.<anonymous> (node:internal/main/worker_thread:192:26)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:831:20)
+    at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
+[2025-03-27 22:46:25] [ERROR] uncaughtException: Socket closed unexpectedly
+Error: Socket closed unexpectedly
+    at Socket.<anonymous> (/app/node_modules/@redis/client/dist/lib/client/socket.js:194:118)
+    at Object.onceWrapper (node:events:639:26)
+    at Socket.emit (node:events:524:28)
+    at TCP.<anonymous> (node:net:343:12)
