@@ -1,0 +1,45 @@
+[package]
+name = "diamond_common"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+async-trait = "0.1.71"
+log = { workspace = true }
+once_cell = { workspace = true }
+lazy_static = "1.4"
+hex = { workspace = true }
+
+# Các dependency cho middleware
+jsonwebtoken = "8.3"
+chrono = { workspace = true }
+uuid = { workspace = true }
+axum = { version = "0.6.20", features = ["headers", "ws"] }
+
+# Network dependencies
+futures = { version = "0.3", features = ["std"] }
+quinn = "0.10.2"
+tonic = { version = "0.10", features = ["transport", "tls", "prost"] }
+tracing = { version = "0.1", features = ["attributes"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rustls = { version = "0.21", features = ["dangerous_configuration"] }
+rcgen = "0.11"
+rand = { workspace = true }
+redis = { version = "0.24", features = ["tokio-comp", "connection-manager", "aio", "json"] }
+prost = "0.12"
+tokio-tungstenite = { version = "0.20", features = ["rustls-tls-webpki-roots"] }
+url = "2.5"
+futures-util = "0.3"
+tokio-stream = "0.1"
+
+[features]
+blockchain = []
+
+[lib]
+name = "diamond_common"
+path = "src/lib.rs"

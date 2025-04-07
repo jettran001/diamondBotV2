@@ -1,0 +1,49 @@
+[package]
+name = "diamond_wallet"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+log = { workspace = true }
+
+# Blockchain
+ethers = { workspace = true }
+web3 = { workspace = true }
+
+# Utilities
+hex = { workspace = true }
+chrono = { workspace = true }
+once_cell = { workspace = true }
+rand = { workspace = true }
+
+# Security
+aes-gcm = { workspace = true }
+sha2 = { workspace = true }
+zeroize = { workspace = true }
+
+# Local dependencies
+diamond_common = { workspace = true }
+diamond_blockchain = { workspace = true }
+
+# New dependencies
+argon2 = { version = "0.5.2", features = ["std"] }
+chacha20poly1305 = { version = "0.10.1", features = ["std"] }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+mockall = "0.11"
+tempfile = "3.3"

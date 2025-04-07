@@ -1,0 +1,58 @@
+[workspace]
+members = [
+    "common",
+    "blockchain",
+    "wallet",
+    "snipebot",
+    "network/wasm",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+# Các thư viện chung
+tokio = { version = "1.28", features = ["full", "tracing"] }
+futures = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = { version = "0.1", features = ["log"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+log = "0.4"
+
+# Blockchain
+ethers = { version = "2.0", features = ["ws", "rustls", "abigen"] }
+web3 = "=0.18.0"
+reqwest = { version = "0.11", features = ["json"] }
+
+# Utilities
+hex = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
+once_cell = "1.17"
+uuid = { version = "1.4", features = ["v4", "serde"] }
+rand = "0.8"
+
+# Security
+aes-gcm = "0.10.1"
+sha2 = "0.10.6"
+zeroize = "1.5.7"
+
+# API
+axum = { version = "0.6.20", features = ["headers"] }
+tower = "0.4.13"
+tower-http = { version = "0.4", features = ["trace", "cors"] }
+
+# Diamond components
+diamond_common = { path = "./common" }
+diamond_blockchain = { path = "./blockchain" }
+diamond_wallet = { path = "./wallet" } 

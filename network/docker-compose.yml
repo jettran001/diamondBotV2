@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  snipebot:
+    build: .
+    container_name: snipebot_rust
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env
+    depends_on:
+      - redis
+      - mqtt
+      - ipfs
+    networks:
+      - snipebot-network
+    environment:
+      - RUST_LOG=info
+
+  redis:
+    image: redis:7
+    container_name: snipebot_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - snipebot-network
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: snipebot_mqtt
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mqtt/config:/mosquitto/config
+      - ./mqtt/data:/mosquitto/data
+      - ./mqtt/log:/mosquitto/log
+    networks:
+      - snipebot-network
+
+  ipfs:
+    image: ipfs/kubo:latest
+    container_name: snipebot_ipfs
+    restart: unless-stopped
+    ports:
+      - "4001:4001"
+      - "5001:5001"
+      - "8081:8081"
+    volumes:
+      - ipfs-data:/data/ipfs
+    networks:
+      - snipebot-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: snipebot_prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    networks:
+      - snipebot-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: snipebot_grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - snipebot-network
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=snipebot
+
+networks:
+  snipebot-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+  ipfs-data:
+  prometheus-data:
+  grafana-data:

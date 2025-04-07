@@ -1,0 +1,93 @@
+[package]
+name = "snipebot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = "0.2"
+
+# Configuration
+config = "0.13"
+dotenv = "0.15"
+
+# Blockchain
+ethers = { workspace = true }
+web3 = { workspace = true }
+
+# WebSocket
+tokio-tungstenite = { version = "0.18", features = ["rustls-tls-webpki-roots"] }
+url = "2.3"
+
+# QUIC
+quinn = "0.9"
+rcgen = "0.10"
+rustls = { version = "0.21", features = ["dangerous_configuration"] }
+
+# MQTT
+rumqttc = "0.21"
+
+# WASM
+wasmer = "3.1"
+
+# Redis
+redis = { version = "0.23", features = ["tokio-comp", "connection-manager"] }
+
+# IPFS
+ipfs-api-backend-hyper = "0.6"
+
+# API
+axum = { version = "0.6", features = ["headers"] }
+tower = "0.4.13"
+tower-http = { version = "0.4", features = ["trace", "cors"] }
+
+# Utilities
+hex = { workspace = true }
+chrono = { workspace = true }
+once_cell = { workspace = true }
+uuid = { workspace = true }
+
+# Security
+aes-gcm = { workspace = true }
+sha2 = { workspace = true }
+libsodium-sys = "0.2.7"
+zeroize = { workspace = true }
+
+# Local dependencies
+diamond_wallet = { workspace = true }
+diamond_common = { workspace = true }
+diamond_blockchain = { workspace = true }
+
+# Crates mới
+backoff = { version = "0.4", features = ["tokio"] }
+metrics = "0.21"
+metrics-exporter-prometheus = "0.12"
+cached = "0.44"
+dashmap = "5.5"
+serde_with = "3.1"
+deadpool = "0.10"
+tokio-util = "0.7"
+
+# New dependencies
+reqwest = { workspace = true }
+sysinfo = "0.29.10"
+
+[build-dependencies]
+# tonic-build = "0.9"
+
+[dev-dependencies]
+env_logger = "0.11"

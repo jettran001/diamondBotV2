@@ -1,0 +1,28 @@
+# Thư mục target trung tâm cho workspace
+/target/
+
+# Thư mục target riêng cho từng crate
+/*/target/
+/*/*/target/
+
+# Các file IDE
+.vscode/
+.idea/
+*.iml
+
+# Các file hệ thống
+.DS_Store
+Thumbs.db
+
+# File environment
+.env
+.env.local
+
+# Log
+*.log
+/logs/
+
+**/*.rs.bk
+.env.development.local
+.env.test.local
+.env.production.local

@@ -1,0 +1,28 @@
+[package]
+name = "diamond_blockchain"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Ethers for blockchain interaction
+ethers = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Utilities
+once_cell = { workspace = true }
+hex = { workspace = true }
+
+# Các phụ thuộc nội bộ
+diamond_common = { workspace = true }
+
+[lib]
+path = "src/lib.rs"
+
+# Xóa phần workspace vì đã được định nghĩa trong workspace chính 
