@@ -1,21 +1,51 @@
-use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
+// External imports
+use axum::{
+    http::Request,
+    middleware::Next,
+    response::{Response, IntoResponse},
+};
+
+// Standard library imports
+use std::{
+    collections::HashMap,
+    time::{SystemTime, UNIX_EPOCH},
+    fmt::{self, Display, Formatter},
+    error::Error,
+};
+
+// Third party imports
+use anyhow::{Result, Context};
+use tracing::{info, warn, error, debug};
+use async_trait::async_trait;
 use tokio::sync::RwLock;
 use once_cell::sync::Lazy;
+use tokio::time::{timeout, sleep};
 
-// Cấu trúc dữ liệu cho rate limiting
+/// Cấu trúc dữ liệu cho rate limiting
 #[derive(Debug, Clone)]
 pub struct RateLimitData {
+    /// Số lượng request trong window
     pub count: usize,
+    /// Thời gian bắt đầu window
     pub window_start: u64,
 }
 
-// Cache cho rate limit, sử dụng tokio::sync::RwLock cho async access
+/// Cache cho rate limit, sử dụng tokio::sync::RwLock cho async access
 pub static RATE_LIMIT_CACHE: Lazy<RwLock<HashMap<String, RateLimitData>>> = Lazy::new(|| {
     RwLock::new(HashMap::new())
 });
 
-// Hàm kiểm tra rate limit
+/// Hàm kiểm tra rate limit
+///
+/// # Arguments
+///
+/// * `key` - Key để phân biệt các request
+/// * `limit` - Giới hạn số lượng request trong window
+/// * `window_size` - Kích thước window (giây)
+///
+/// # Returns
+///
+/// * `bool` - True nếu request được phép, False nếu vượt quá limit
 pub async fn check_rate_limit(key: &str, limit: usize, window_size: u64) -> bool {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -63,13 +93,18 @@ pub async fn check_rate_limit(key: &str, limit: usize, window_size: u64) -> bool
     }
 }
 
+/// Rate limiter
 pub struct RateLimiter {
-    window_size: u64,    // Seconds
-    cleanup_interval: u64, // Seconds
+    /// Kích thước window (giây)
+    window_size: u64,
+    /// Khoảng thời gian dọn dẹp (giây)
+    cleanup_interval: u64,
+    /// Thời gian dọn dẹp cuối
     last_cleanup: u64,
 }
 
 impl RateLimiter {
+    /// Tạo mới RateLimiter
     pub fn new(window_size: u64, cleanup_interval: u64) -> Self {
         Self {
             window_size,
@@ -78,6 +113,7 @@ impl RateLimiter {
         }
     }
     
+    /// Kiểm tra rate limit
     pub async fn check_limit(&mut self, key: &str, limit: usize) -> bool {
         let result = check_rate_limit(key, limit, self.window_size).await;
         
@@ -91,6 +127,7 @@ impl RateLimiter {
         result
     }
     
+    /// Dọn dẹp cache
     async fn cleanup(&self) {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
         let mut cache = RATE_LIMIT_CACHE.write().await;
@@ -100,18 +137,31 @@ impl RateLimiter {
     }
 }
 
-// Custom middleware cho rate limit
+/// Custom middleware cho rate limit
+///
+/// # Arguments
+///
+/// * `request` - Request cần kiểm tra
+/// * `next` - Middleware tiếp theo
+/// * `key_extractor` - Hàm trích xuất key từ request
+/// * `limit` - Giới hạn số lượng request trong window
+/// * `window_size` - Kích thước window (giây)
+/// * `error_response` - Hàm tạo response lỗi
+///
+/// # Returns
+///
+/// * `Result<Response, E>` - Response hoặc lỗi
 pub async fn rate_limit_middleware<B, F, E>(
-    request: axum::http::Request<B>,
-    next: axum::middleware::Next<B>,
+    request: Request<B>,
+    next: Next<B>,
     key_extractor: F,
     limit: usize,
     window_size: u64,
     error_response: impl Fn() -> E,
-) -> Result<axum::response::Response, E>
+) -> Result<Response, E>
 where
-    F: FnOnce(&axum::http::Request<B>) -> String,
-    E: axum::response::IntoResponse,
+    F: FnOnce(&Request<B>) -> String,
+    E: IntoResponse,
 {
     let key = key_extractor(&request);
     
@@ -122,16 +172,28 @@ where
     }
 }
 
-// IP-based rate limiter
+/// IP-based rate limiter
+///
+/// # Arguments
+///
+/// * `request` - Request cần kiểm tra
+/// * `next` - Middleware tiếp theo
+/// * `limit` - Giới hạn số lượng request trong window
+/// * `window_size` - Kích thước window (giây)
+/// * `error_response` - Hàm tạo response lỗi
+///
+/// # Returns
+///
+/// * `Result<Response, E>` - Response hoặc lỗi
 pub async fn ip_rate_limit_middleware<B, E>(
-    request: axum::http::Request<B>,
-    next: axum::middleware::Next<B>,
+    request: Request<B>,
+    next: Next<B>,
     limit: usize,
     window_size: u64,
     error_response: impl Fn() -> E,
-) -> Result<axum::response::Response, E>
+) -> Result<Response, E>
 where
-    E: axum::response::IntoResponse,
+    E: IntoResponse,
 {
     use crate::middleware::auth::extract_client_ip;
     
@@ -141,5 +203,74 @@ where
         Ok(next.run(request).await)
     } else {
         Err(error_response())
+    }
+}
+
+/// Module tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test rate limit
+    #[test]
+    fn test_rate_limit() {
+        let key = "test_key";
+        let limit = 5;
+        let window_size = 60;
+        
+        // Test trong cùng một window
+        for _ in 0..limit {
+            assert!(check_rate_limit(key, limit, window_size).await);
+        }
+        
+        // Test vượt quá limit
+        assert!(!check_rate_limit(key, limit, window_size).await);
+    }
+
+    /// Test rate limiter
+    #[test]
+    fn test_rate_limiter() {
+        let mut limiter = RateLimiter::new(60, 3600);
+        let key = "test_key";
+        let limit = 5;
+        
+        // Test trong cùng một window
+        for _ in 0..limit {
+            assert!(limiter.check_limit(key, limit).await);
+        }
+        
+        // Test vượt quá limit
+        assert!(!limiter.check_limit(key, limit).await);
+    }
+
+    /// Test rate limit middleware
+    #[test]
+    fn test_rate_limit_middleware() {
+        let request = Request::new(());
+        let key = "test_key";
+        let limit = 5;
+        let window_size = 60;
+        
+        // Test trong cùng một window
+        for _ in 0..limit {
+            assert!(rate_limit_middleware(
+                request.clone(),
+                Next::new(|| async { Response::new(()) }),
+                |_| key.to_string(),
+                limit,
+                window_size,
+                || Response::new(())
+            ).await.is_ok());
+        }
+        
+        // Test vượt quá limit
+        assert!(rate_limit_middleware(
+            request,
+            Next::new(|| async { Response::new(()) }),
+            |_| key.to_string(),
+            limit,
+            window_size,
+            || Response::new(())
+        ).await.is_err());
     }
 } 

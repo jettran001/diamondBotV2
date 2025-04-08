@@ -1,42 +1,74 @@
-use std::sync::Arc;
-use anyhow::{Result, anyhow};
-use serde::{Serialize, Deserialize};
+// External imports
+use axum::{
+    http::{Request, Response},
+    middleware::Next,
+    response::IntoResponse,
+};
+
+// Standard library imports
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    fmt::{self, Display, Formatter},
+    error::Error,
+    any::Any,
+};
+
+// Third party imports
+use anyhow::{Result, Context, anyhow};
+use tracing::{info, warn, error, debug};
 use async_trait::async_trait;
-use log::info;
+use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
+use uuid::Uuid;
+use std::future::Future;
+use tokio::time::{timeout, sleep};
 
 /// Thông tin người dùng
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UserInfo {
+    /// ID người dùng
     pub id: String,
+    /// Tên người dùng
     pub username: String,
+    /// Danh sách vai trò
     pub roles: Vec<String>,
+    /// Danh sách quyền
     pub permissions: Vec<String>,
-    pub metadata: std::collections::HashMap<String, String>,
+    /// Metadata tùy chỉnh
+    pub metadata: HashMap<String, String>,
 }
 
 /// Thông tin request
 #[derive(Clone, Debug)]
 pub struct RequestContext {
+    /// Đường dẫn request
     pub path: String,
+    /// Phương thức HTTP
     pub method: String,
+    /// Thông tin người dùng
     pub user: Option<UserInfo>,
+    /// ID request
     pub request_id: String,
+    /// Thời gian bắt đầu
     pub start_time: DateTime<Utc>,
+    /// IP client
     pub client_ip: Option<String>,
-    pub attributes: std::collections::HashMap<String, Arc<dyn std::any::Any + Send + Sync>>,
+    /// Các thuộc tính tùy chỉnh
+    pub attributes: HashMap<String, Arc<dyn Any + Send + Sync>>,
 }
 
 impl RequestContext {
+    /// Tạo mới RequestContext
     pub fn new(path: &str, method: &str) -> Self {
         Self {
             path: path.to_string(),
             method: method.to_string(),
             user: None,
-            request_id: uuid::Uuid::new_v4().to_string(),
+            request_id: Uuid::new_v4().to_string(),
             start_time: Utc::now(),
             client_ip: None,
-            attributes: std::collections::HashMap::new(),
+            attributes: HashMap::new(),
         }
     }
     
@@ -55,18 +87,22 @@ impl RequestContext {
 
 /// Loại kết quả request
 pub enum RequestOutcome {
-    Next, // Chuyển tiếp cho middleware tiếp theo
-    Stop(Result<()>), // Dừng chuỗi middleware với kết quả
+    /// Chuyển tiếp cho middleware tiếp theo
+    Next,
+    /// Dừng chuỗi middleware với kết quả
+    Stop(Result<()>),
 }
 
 /// Middleware trait
 #[async_trait]
 pub trait Middleware: Send + Sync {
+    /// Xử lý request
     async fn process(&self, ctx: &mut RequestContext) -> RequestOutcome;
 }
 
 /// Middleware chain
 pub struct MiddlewareChain {
+    /// Danh sách middleware
     middlewares: Vec<Arc<dyn Middleware>>,
 }
 
@@ -77,6 +113,7 @@ impl Default for MiddlewareChain {
 }
 
 impl MiddlewareChain {
+    /// Tạo mới MiddlewareChain
     pub fn new() -> Self {
         Self {
             middlewares: Vec::new(),
@@ -103,13 +140,15 @@ impl MiddlewareChain {
 }
 
 /// Authentication middleware
-#[allow(dead_code)] // Thêm chú thích cho trường không đọc
 pub struct AuthMiddleware {
+    /// Secret key cho JWT
     jwt_secret: String,
+    /// Danh sách vai trò yêu cầu
     required_roles: Option<Vec<String>>,
 }
 
 impl AuthMiddleware {
+    /// Tạo mới AuthMiddleware
     pub fn new(jwt_secret: &str) -> Self {
         Self {
             jwt_secret: jwt_secret.to_string(),
@@ -117,11 +156,13 @@ impl AuthMiddleware {
         }
     }
     
+    /// Yêu cầu các vai trò cụ thể
     pub fn require_roles(mut self, roles: Vec<String>) -> Self {
         self.required_roles = Some(roles);
         self
     }
     
+    /// Xác thực token
     fn validate_token(&self, token: &str) -> Result<UserInfo> {
         // TODO: Implement JWT validation
         // Ví dụ giả định:
@@ -135,7 +176,7 @@ impl AuthMiddleware {
             username: "testuser".to_string(),
             roles: vec!["user".to_string(), "admin".to_string()],
             permissions: vec!["read".to_string(), "write".to_string()],
-            metadata: std::collections::HashMap::new(),
+            metadata: HashMap::new(),
         };
         
         Ok(user)
@@ -174,19 +215,27 @@ impl Middleware for AuthMiddleware {
 }
 
 /// Rate limiting middleware
-#[allow(dead_code)] // Thêm chú thích cho các trường không đọc
 pub struct RateLimitMiddleware {
+    /// Số lượng request tối đa
     max_requests: u32,
+    /// Kích thước window (giây)
     window_seconds: u64,
+    /// Redis service
     redis_service: Option<Arc<dyn RedisProvider>>,
 }
 
-/// Redis provider trait
-pub trait RedisProvider: Send + Sync {
+/// Redis provider interface
+pub trait RedisProvider: Send + Sync + 'static {
     // Các phương thức cần thiết cho Redis
+    fn get(&self, key: &str) -> Box<dyn Future<Output = Result<Option<String>>> + Send + '_>;
+    fn set(&self, key: &str, value: &str) -> Box<dyn Future<Output = Result<()>> + Send + '_>;
+    fn del(&self, key: &str) -> Box<dyn Future<Output = Result<()>> + Send + '_>;
+    fn exists(&self, key: &str) -> Box<dyn Future<Output = Result<bool>> + Send + '_>;
+    fn expire(&self, key: &str, seconds: usize) -> Box<dyn Future<Output = Result<()>> + Send + '_>;
 }
 
 impl RateLimitMiddleware {
+    /// Tạo mới RateLimitMiddleware
     pub fn new(max_requests: u32, window_seconds: u64) -> Self {
         Self {
             max_requests,
@@ -195,6 +244,7 @@ impl RateLimitMiddleware {
         }
     }
     
+    /// Thêm Redis service
     pub fn with_redis(mut self, redis: Arc<dyn RedisProvider>) -> Self {
         self.redis_service = Some(redis);
         self
@@ -241,10 +291,15 @@ impl Middleware for LoggingMiddleware {
 
 /// CORS middleware
 pub struct CorsMiddleware {
+    /// Danh sách origin được phép
     allowed_origins: Vec<String>,
+    /// Cho phép credentials
     allow_credentials: bool,
+    /// Danh sách header được phép
     allowed_headers: Vec<String>,
+    /// Danh sách phương thức được phép
     allowed_methods: Vec<String>,
+    /// Thời gian cache (giây)
     max_age: u32,
 }
 
@@ -255,36 +310,42 @@ impl Default for CorsMiddleware {
 }
 
 impl CorsMiddleware {
+    /// Tạo mới CorsMiddleware
     pub fn new() -> Self {
         Self {
             allowed_origins: vec!["*".to_string()],
             allow_credentials: false,
-            allowed_headers: vec!["Content-Type".to_string(), "Authorization".to_string()],
-            allowed_methods: vec!["GET".to_string(), "POST".to_string(), "PUT".to_string(), "DELETE".to_string()],
-            max_age: 86400, // 24 giờ
+            allowed_headers: vec!["*".to_string()],
+            allowed_methods: vec!["*".to_string()],
+            max_age: 86400,
         }
     }
     
+    /// Thêm origin được phép
     pub fn allowed_origins(mut self, origins: Vec<String>) -> Self {
         self.allowed_origins = origins;
         self
     }
     
+    /// Thêm phương thức được phép
     pub fn allowed_methods(mut self, methods: Vec<String>) -> Self {
         self.allowed_methods = methods;
         self
     }
     
+    /// Thêm header được phép
     pub fn allowed_headers(mut self, headers: Vec<String>) -> Self {
         self.allowed_headers = headers;
         self
     }
     
+    /// Cho phép credentials
     pub fn allow_credentials(mut self, allow: bool) -> Self {
         self.allow_credentials = allow;
         self
     }
     
+    /// Đặt thời gian cache
     pub fn max_age(mut self, seconds: u32) -> Self {
         self.max_age = seconds;
         self
@@ -294,8 +355,51 @@ impl CorsMiddleware {
 #[async_trait]
 impl Middleware for CorsMiddleware {
     async fn process(&self, _ctx: &mut RequestContext) -> RequestOutcome {
-        // TODO: Implement CORS checking and headers
-        // Ví dụ đơn giản này luôn cho phép truy cập
+        // TODO: Implement CORS headers
         RequestOutcome::Next
+    }
+}
+
+/// Module tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test RequestContext
+    #[test]
+    fn test_request_context() {
+        let mut ctx = RequestContext::new("/test", "GET");
+        assert_eq!(ctx.path, "/test");
+        assert_eq!(ctx.method, "GET");
+        assert!(ctx.user.is_none());
+        assert!(ctx.client_ip.is_none());
+    }
+
+    /// Test AuthMiddleware
+    #[test]
+    fn test_auth_middleware() {
+        let middleware = AuthMiddleware::new("secret");
+        let user = middleware.validate_token("valid").unwrap();
+        assert_eq!(user.id, "user123");
+        assert_eq!(user.username, "testuser");
+    }
+
+    /// Test RateLimitMiddleware
+    #[test]
+    fn test_rate_limit_middleware() {
+        let middleware = RateLimitMiddleware::new(100, 60);
+        assert_eq!(middleware.max_requests, 100);
+        assert_eq!(middleware.window_seconds, 60);
+    }
+
+    /// Test CorsMiddleware
+    #[test]
+    fn test_cors_middleware() {
+        let middleware = CorsMiddleware::new();
+        assert_eq!(middleware.allowed_origins, vec!["*"]);
+        assert!(!middleware.allow_credentials);
+        assert_eq!(middleware.allowed_headers, vec!["*"]);
+        assert_eq!(middleware.allowed_methods, vec!["*"]);
+        assert_eq!(middleware.max_age, 86400);
     }
 } 

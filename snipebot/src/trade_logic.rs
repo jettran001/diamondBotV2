@@ -18,15 +18,6 @@ use std::{
     error::Error,
 };
 
-// Internal imports
-use crate::{
-    chain_adapters::{ChainAdapter, AsyncChainAdapter},
-    blockchain::{Blockchain, Transaction, TransactionReceipt},
-    network::{Network, NetworkConfig},
-    storage::{Storage, StorageConfig},
-    risk_analyzer::{RiskAnalyzer, RiskConfig},
-};
-
 // Third party imports
 use anyhow::{Result, Context};
 use tracing::{info, warn, error, debug};
@@ -35,12 +26,15 @@ use tokio::time::{timeout, sleep};
 
 // Internal imports
 use crate::{
-    risk_analyzer::{RiskAnalyzer, TokenRiskAnalysis},
+    chain_adapters::{ChainAdapter, AsyncChainAdapter},
+    blockchain::{Blockchain, Transaction, TransactionReceipt},
+    network::{Network, NetworkConfig},
+    storage::{Storage, StorageConfig},
+    risk_analyzer::{RiskAnalyzer, RiskConfig, TokenRiskAnalysis},
     gas_optimizer::GasOptimizer,
     token_status::{TokenStatusTracker, TokenStatus, TokenPriceAlert, PriceAlertType},
     error::{TransactionError, classify_blockchain_error, get_recovery_info, RecoveryAction},
     abi_utils,
-    storage::Storage,
     types::{
         TradeConfig, TradeStats, TradeResult, TradeType, TradingPosition,
         ProfitTarget, StopLossConfig, AIConfig, AISuggestion, DCAStrategy,
@@ -245,7 +239,7 @@ pub struct TradingPosition {
 }
 
 /// Cấu trúc lưu trữ dữ liệu cache
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CacheEntry<T> {
     pub value: T,
     pub expires_at: Instant,
@@ -282,19 +276,19 @@ pub struct TradeManager<A: ChainAdapter + AsyncChainAdapter + Send + Sync + 'sta
     storage: Arc<Storage>,
     
     /// Risk analyzer
-    risk_analyzer: Arc<dyn RiskAnalyzer>,
+    risk_analyzer: Arc<dyn RiskAnalyzer + Send + Sync + 'static>,
     
     /// Mempool tracker
-    mempool_tracker: Option<Arc<Mutex<dyn MempoolTracker>>>,
+    mempool_tracker: Option<Arc<Mutex<dyn MempoolTracker + Send + Sync + 'static>>>,
     
     /// TWAP calculator
-    twap_calculator: Option<Arc<Mutex<dyn TWAPCalculator>>>,
+    twap_calculator: Option<Arc<Mutex<dyn TWAPCalculator + Send + Sync + 'static>>>,
     
     /// Monte Carlo simulator
-    monte_carlo_simulator: Option<Arc<Mutex<dyn MonteCarloSimulator>>>,
+    monte_carlo_simulator: Option<Arc<Mutex<dyn MonteCarloSimulator + Send + Sync + 'static>>>,
     
     /// DCA strategies
-    dca_strategies: HashMap<String, dyn DCAStrategy>,
+    dca_strategies: HashMap<String, Box<dyn DCAStrategy + Send + Sync + 'static>>,
     
     /// Cache
     cache: RwLock<HashMap<String, CacheEntry<Vec<u8>>>>,
@@ -316,7 +310,7 @@ impl<A: ChainAdapter + AsyncChainAdapter + Send + Sync + 'static> TradeManager<A
         blockchain: Arc<Blockchain>,
         network: Arc<Network>,
         storage: Arc<Storage>,
-        risk_analyzer: Arc<dyn RiskAnalyzer>,
+        risk_analyzer: Arc<dyn RiskAnalyzer + Send + Sync + 'static>,
         config: TradeConfig,
     ) -> Self {
         Self {
@@ -668,7 +662,7 @@ impl<A: ChainAdapter + AsyncChainAdapter + Send + Sync + 'static> TradeManager<A
 
     /// Triển khai DCAStrategy
     impl DCAStrategy for TradeManager<A> {
-        fn add_dca_strategy(&mut self, token_address: &str, strategy: DCAStrategy) -> Result<()> {
+        fn add_dca_strategy(&mut self, token_address: &str, strategy: Box<dyn DCAStrategy>) -> Result<()> {
             let mut strategies = self.dca_strategies.lock().unwrap();
             strategies.insert(token_address.to_string(), strategy);
             Ok(())
@@ -680,12 +674,12 @@ impl<A: ChainAdapter + AsyncChainAdapter + Send + Sync + 'static> TradeManager<A
             Ok(())
         }
 
-        fn get_dca_strategy(&self, token_address: &str) -> Result<Option<DCAStrategy>> {
+        fn get_dca_strategy(&self, token_address: &str) -> Result<Option<Box<dyn DCAStrategy>>> {
             let strategies = self.dca_strategies.lock().unwrap();
             Ok(strategies.get(token_address).cloned())
         }
 
-        fn get_dca_strategies(&self) -> Result<Vec<DCAStrategy>> {
+        fn get_dca_strategies(&self) -> Result<Vec<Box<dyn DCAStrategy>>> {
             let strategies = self.dca_strategies.lock().unwrap();
             Ok(strategies.values().cloned().collect())
         }
@@ -968,7 +962,7 @@ impl<A: ChainAdapter + AsyncChainAdapter + Send + Sync + 'static> TradeManager<A
 
 /// Trait cho Flashbots Bundle Provider
 #[async_trait]
-pub trait FlashbotsBundleProvider: Send + Sync {
+pub trait FlashbotsBundleProvider: Send + Sync + 'static {
     /// Gửi bundle
     async fn send_bundle(&self, bundle: FlashbotsBundle) -> Result<()>;
     
@@ -1001,7 +995,7 @@ pub trait FlashbotsBundleProvider: Send + Sync {
 }
 
 /// Trait cho TWAP Calculator
-pub trait TWAPCalculator: Send + Sync {
+pub trait TWAPCalculator: Send + Sync + 'static {
     /// Cập nhật TWAP với giá mới
     fn update_twap(&mut self, price: U256) -> Result<()>;
     
@@ -1034,7 +1028,7 @@ pub trait TWAPCalculator: Send + Sync {
 }
 
 /// Trait cho Monte Carlo Simulator
-pub trait MonteCarloSimulator: Send + Sync {
+pub trait MonteCarloSimulator: Send + Sync + 'static {
     /// Chạy mô phỏng Monte Carlo
     fn run_simulation(&mut self, token_address: &str, config: MonteCarloConfig) -> Result<()>;
     
@@ -1076,18 +1070,18 @@ pub trait MonteCarloSimulator: Send + Sync {
 }
 
 /// Trait cho DCA Strategy
-pub trait DCAStrategy: Send + Sync {
+pub trait DCAStrategy: Send + Sync + 'static {
     /// Thêm chiến lược DCA mới
-    fn add_dca_strategy(&mut self, token_address: &str, strategy: DCAStrategy) -> Result<()>;
+    fn add_dca_strategy(&mut self, token_address: &str, strategy: Box<dyn DCAStrategy>) -> Result<()>;
     
     /// Xóa chiến lược DCA
     fn remove_dca_strategy(&mut self, token_address: &str) -> Result<()>;
     
     /// Lấy chiến lược DCA
-    fn get_dca_strategy(&self, token_address: &str) -> Result<Option<DCAStrategy>>;
+    fn get_dca_strategy(&self, token_address: &str) -> Result<Option<Box<dyn DCAStrategy>>>;
     
     /// Lấy tất cả chiến lược DCA
-    fn get_dca_strategies(&self) -> Result<Vec<DCAStrategy>>;
+    fn get_dca_strategies(&self) -> Result<Vec<Box<dyn DCAStrategy>>>;
     
     /// Lấy số lượng token cho mỗi lần mua
     fn get_token_amount(&self, token_address: &str) -> Result<Option<U256>>;
@@ -1181,23 +1175,6 @@ pub struct MonteCarloResult {
     pub cvar: f64,
     /// Số bước thời gian
     pub time_steps: u64,
-}
-
-/// Cấu trúc DCA Strategy
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DCAStrategy {
-    /// Địa chỉ token
-    pub token_address: String,
-    /// Số lượng token mỗi lần mua
-    pub amount: U256,
-    /// Khoảng thời gian giữa các lần mua
-    pub interval: DCAInterval,
-    /// Giá tối đa
-    pub max_price: Option<U256>,
-    /// Thời gian thực hiện cuối cùng
-    pub last_execution: Option<u64>,
-    /// Trạng thái kích hoạt
-    pub enabled: bool,
 }
 
 /// Enum khoảng thời gian DCA
@@ -1376,7 +1353,7 @@ pub enum PriceAlertType {
     PriceExceeded,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TradeType {
     Buy,
     Sell,
@@ -1385,7 +1362,7 @@ pub enum TradeType {
     Transfer
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AISuggestionType {
     Buy,
     Sell,
@@ -1394,7 +1371,7 @@ pub enum AISuggestionType {
     TakeProfit
 }
 
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Callbacks {
     pub on_trade: Option<Box<dyn Fn(TradeType, String, f64) + Send + Sync>>,
     pub on_error: Option<Box<dyn Fn(String) + Send + Sync>>,

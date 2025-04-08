@@ -143,9 +143,40 @@ async fn handle_logout(token: &str) -> Result<(), String> {
 
 - `auth.rs`: Chứa các middleware xác thực JWT, kiểm tra quyền, và blacklist.
 - `rate_limit.rs`: Chứa các middleware giới hạn tốc độ truy cập API.
+- `core.rs`: Chứa các middleware cơ bản như CORS, logging, và chain.
 
 ## Lưu ý
 
 1. Các cấu trúc lỗi nên được tùy chỉnh theo từng ứng dụng.
 2. Giá trị JWT secret nên được lấy từ biến môi trường hoặc file cấu hình.
-3. Khi sử dụng trong môi trường sản xuất, hãy đảm bảo sử dụng HTTPS để bảo mật token. 
+3. Khi sử dụng trong môi trường sản xuất, hãy đảm bảo sử dụng HTTPS để bảo mật token.
+4. Các middleware nên được sử dụng theo thứ tự phù hợp:
+   - CORS middleware nên được sử dụng đầu tiên
+   - Rate limiting middleware nên được sử dụng trước authentication
+   - Authentication middleware nên được sử dụng trước role checking
+   - Logging middleware nên được sử dụng cuối cùng
+
+## Ví dụ đầy đủ
+
+```rust
+use diamond_common::middleware::{
+    auth::{JWTAuthMiddleware, UserRole},
+    rate_limit::ip_rate_limit_middleware,
+    core::{CorsMiddleware, LoggingMiddleware},
+};
+
+// Tạo middleware chain
+let mut chain = MiddlewareChain::new()
+    .add(CorsMiddleware::new())
+    .add(ip_rate_limit_middleware(100, 60))
+    .add(JWTAuthMiddleware::new("secret"))
+    .add(LoggingMiddleware);
+
+// Sử dụng với router
+let app = Router::new()
+    .route("/api/public", get(public_endpoint))
+    .route_layer(middleware::from_fn(|req, next| async move {
+        chain.execute(&mut RequestContext::new(req.uri().path(), req.method().as_str())).await?;
+        next.run(req).await
+    }));
+``` 

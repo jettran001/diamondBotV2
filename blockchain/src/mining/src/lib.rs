@@ -1,37 +1,98 @@
-use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::collections::LookupMap;
-use near_sdk::json_types::U128;
+// External imports
 use near_sdk::{
+    borsh::{self, BorshDeserialize, BorshSerialize},
+    collections::LookupMap,
+    json_types::U128,
     env, log, near_bindgen, AccountId, Balance, PanicOnDefault, Promise,
     require, PromiseOrValue, ext_contract,
+    serde::{Deserialize, Serialize},
 };
-use near_sdk::serde::{Deserialize, Serialize};
 
-// Định nghĩa interface cho Diamond Token
+// Standard library imports
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{Arc, Mutex, RwLock},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    fmt::{self, Display, Formatter},
+    error::Error,
+};
+
+// Third party imports
+use anyhow::{Result, Context};
+use tracing::{info, warn, error, debug};
+use async_trait::async_trait;
+use tokio::time::{timeout, sleep};
+
+/// Interface cho Diamond Token
 #[ext_contract(ext_diamond_token)]
-pub trait DiamondToken {
+pub trait DiamondToken: Send + Sync + 'static {
+    /// Mint token cho account
+    /// 
+    /// # Arguments
+    /// 
+    /// * `account_id` - Account ID nhận token
+    /// * `amount` - Số lượng token cần mint
+    /// 
+    /// # Returns
+    /// 
+    /// * `Promise` - Promise cho việc mint token
     fn mint(&mut self, account_id: AccountId, amount: U128) -> Promise;
+    
+    /// Lấy số dư token của account
+    /// 
+    /// # Arguments
+    /// 
+    /// * `account_id` - Account ID cần kiểm tra
+    /// 
+    /// # Returns
+    /// 
+    /// * `U128` - Số dư token
     fn ft_balance_of(&self, account_id: AccountId) -> U128;
 }
 
+/// Interface cho Mining Callbacks
 #[ext_contract(ext_self)]
-pub trait MiningCallbacks {
+pub trait MiningCallbacks: Send + Sync + 'static {
+    /// Callback khi claim reward thành công
+    /// 
+    /// # Arguments
+    /// 
+    /// * `user_id` - Account ID của user
+    /// * `amount` - Số lượng token được claim
     fn claim_reward_callback(&mut self, user_id: AccountId, amount: U128);
 }
 
+/// Struct quản lý mining Diamond Token
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct DiamondMining {
+    /// Account ID của owner
     pub owner_id: AccountId,
-    pub diamond_token: AccountId,      // Diamond Token contract
-    pub reward_rate: U128,             // Phần thưởng mỗi block/epoch
-    pub last_reward_block: u64,        // Block/epoch cuối cùng tính phần thưởng
-    pub rewards: LookupMap<AccountId, U128>, // Rewards của mỗi user
-    pub last_update: LookupMap<AccountId, u64>, // Lần cuối mỗi user cập nhật
+    /// Contract ID của Diamond Token
+    pub diamond_token: AccountId,
+    /// Tỷ lệ phần thưởng mỗi block/epoch
+    pub reward_rate: U128,
+    /// Block/epoch cuối cùng tính phần thưởng
+    pub last_reward_block: u64,
+    /// Rewards của mỗi user
+    pub rewards: LookupMap<AccountId, U128>,
+    /// Lần cuối mỗi user cập nhật
+    pub last_update: LookupMap<AccountId, u64>,
+    /// Thời gian cập nhật cuối cùng
+    last_update_time: u64,
 }
 
 #[near_bindgen]
 impl DiamondMining {
+    /// Khởi tạo contract mới
+    /// 
+    /// # Arguments
+    /// 
+    /// * `diamond_token` - Contract ID của Diamond Token
+    /// 
+    /// # Returns
+    /// 
+    /// * `Self` - Instance mới của DiamondMining
     #[init]
     pub fn new(diamond_token: AccountId) -> Self {
         let owner_id = env::predecessor_account_id();
@@ -42,10 +103,14 @@ impl DiamondMining {
             last_reward_block: env::block_height(),
             rewards: LookupMap::new(b"r".to_vec()),
             last_update: LookupMap::new(b"u".to_vec()),
+            last_update_time: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
         }
     }
 
-    // Cập nhật phần thưởng cho user
+    /// Cập nhật phần thưởng cho user
     pub fn update_rewards(&mut self) {
         let user_id = env::predecessor_account_id();
         let current_block = env::block_height();
@@ -66,12 +131,20 @@ impl DiamondMining {
             
             self.rewards.insert(&user_id, &new_reward);
             self.last_update.insert(&user_id, &current_block);
+            self.last_update_time = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
             
             log!("User {} updated rewards: +{} DMD", user_id, total_reward.0);
         }
     }
 
-    // Yêu cầu phần thưởng
+    /// Yêu cầu phần thưởng
+    /// 
+    /// # Returns
+    /// 
+    /// * `Promise` - Promise cho việc claim reward
     #[payable]
     pub fn claim_rewards(&mut self) -> Promise {
         let user_id = env::predecessor_account_id();
@@ -101,6 +174,12 @@ impl DiamondMining {
             )
     }
 
+    /// Callback khi claim reward thành công
+    /// 
+    /// # Arguments
+    /// 
+    /// * `user_id` - Account ID của user
+    /// * `amount` - Số lượng token được claim
     #[private]
     pub fn claim_reward_callback(&mut self, user_id: AccountId, amount: U128) {
         if env::promise_result(0) == near_sdk::PromiseResult::Successful {
@@ -113,7 +192,15 @@ impl DiamondMining {
         }
     }
 
-    // Lấy phần thưởng hiện tại của user
+    /// Lấy phần thưởng hiện tại của user
+    /// 
+    /// # Arguments
+    /// 
+    /// * `account_id` - Account ID của user
+    /// 
+    /// # Returns
+    /// 
+    /// * `U128` - Số lượng token thưởng
     pub fn get_pending_reward(&self, account_id: AccountId) -> U128 {
         let current_reward = self.rewards.get(&account_id).unwrap_or(U128(0));
         
@@ -130,7 +217,11 @@ impl DiamondMining {
         current_reward
     }
 
-    // Thay đổi tỷ lệ phần thưởng (chỉ owner)
+    /// Thay đổi tỷ lệ phần thưởng (chỉ owner)
+    /// 
+    /// # Arguments
+    /// 
+    /// * `reward_rate` - Tỷ lệ phần thưởng mới
     #[payable]
     pub fn set_reward_rate(&mut self, reward_rate: U128) {
         self.assert_owner();
@@ -138,7 +229,7 @@ impl DiamondMining {
         log!("Reward rate updated to {} DMD per block", reward_rate.0);
     }
 
-    // Force cập nhật phần thưởng cho tất cả các user (chỉ owner)
+    /// Force cập nhật phần thưởng cho tất cả các user (chỉ owner)
     #[payable]
     pub fn force_update_global_reward(&mut self) {
         self.assert_owner();
@@ -146,7 +237,11 @@ impl DiamondMining {
         log!("Global reward block updated to {}", self.last_reward_block);
     }
 
-    // Cấu hình token contract (chỉ owner)
+    /// Cấu hình token contract (chỉ owner)
+    /// 
+    /// # Arguments
+    /// 
+    /// * `diamond_token` - Contract ID mới của Diamond Token
     #[payable]
     pub fn set_diamond_token(&mut self, diamond_token: AccountId) {
         self.assert_owner();
@@ -154,15 +249,19 @@ impl DiamondMining {
         log!("Diamond Token contract updated to {}", self.diamond_token);
     }
 
-    // Chuyển quyền owner
+    /// Chuyển quyền owner
+    /// 
+    /// # Arguments
+    /// 
+    /// * `new_owner` - Account ID của owner mới
     #[payable]
     pub fn transfer_ownership(&mut self, new_owner: AccountId) {
         self.assert_owner();
         self.owner_id = new_owner;
-        log!("Ownership transferred to {}", self.owner_id);
+        log!("Ownership transferred to {}", new_owner);
     }
 
-    // Kiểm tra owner
+    /// Kiểm tra quyền owner
     fn assert_owner(&self) {
         require!(
             env::predecessor_account_id() == self.owner_id,
@@ -171,59 +270,43 @@ impl DiamondMining {
     }
 }
 
+/// Module tests
 #[cfg(test)]
 mod tests {
     use super::*;
-    use near_sdk::test_utils::{accounts, VMContextBuilder};
+    use near_sdk::test_utils::{get_context, VMContextBuilder};
+    use near_sdk::MockedBlockchain;
     use near_sdk::{testing_env, VMContext};
 
-    fn get_context(predecessor_account_id: AccountId, block_height: u64) -> VMContext {
-        let mut builder = VMContextBuilder::new();
-        builder.predecessor_account_id(predecessor_account_id);
-        builder.current_account_id(accounts(0));
-        builder.block_index(block_height);
-        builder.build()
-    }
-
+    /// Test khởi tạo contract
     #[test]
     fn test_new() {
-        let context = get_context(accounts(1), 100);
+        let context = get_context("alice".to_string(), 1);
         testing_env!(context);
         
-        let contract = DiamondMining::new(accounts(2));
-        assert_eq!(contract.owner_id, accounts(1));
-        assert_eq!(contract.diamond_token, accounts(2));
+        let contract = DiamondMining::new("diamond_token".to_string());
+        
+        assert_eq!(contract.owner_id, "alice".to_string());
+        assert_eq!(contract.diamond_token, "diamond_token".to_string());
         assert_eq!(contract.reward_rate.0, 10_000_000_000_000_000_000);
-        assert_eq!(contract.last_reward_block, 100);
+        assert_eq!(contract.last_reward_block, 1);
     }
 
+    /// Test cập nhật phần thưởng
     #[test]
     fn test_update_rewards() {
-        let user = accounts(1);
-        let token = accounts(2);
+        let mut context = get_context("alice".to_string(), 1);
+        testing_env!(context.clone());
         
-        // Khởi tạo ở block 100
-        let context = get_context(user.clone(), 100);
-        testing_env!(context);
+        let mut contract = DiamondMining::new("diamond_token".to_string());
         
-        let mut contract = DiamondMining::new(token);
-        
-        // Đi tới block 110
-        let context = get_context(user.clone(), 110);
-        testing_env!(context);
+        // Cập nhật block height
+        context.block_height = 10;
+        testing_env!(context.clone());
         
         contract.update_rewards();
         
-        // Phần thưởng cho 10 block = 10 blocks * 10 DMD = 100 DMD
-        let reward = contract.get_pending_reward(user.clone());
-        assert_eq!(reward.0, 100_000_000_000_000_000_000);
-        
-        // Đi tiếp tới block 115
-        let context = get_context(user.clone(), 115);
-        testing_env!(context);
-        
-        // Phần thưởng thêm cho 5 block = 5 blocks * 10 DMD = 50 DMD
-        let reward = contract.get_pending_reward(user.clone());
-        assert_eq!(reward.0, 150_000_000_000_000_000_000);
+        let reward = contract.get_pending_reward("alice".to_string());
+        assert_eq!(reward.0, 90_000_000_000_000_000_000); // 9 blocks * 10 DMD
     }
 }

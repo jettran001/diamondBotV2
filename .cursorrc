@@ -1,4 +1,114 @@
 {
+  "code_review_principles": {
+    "*": {
+      "priority": "MANDATORY",
+      "description": "Nguyên tắc bắt buộc khi sửa code hoặc viết code mới",
+      "enforcement": {
+        "pre_condition": "BẮT BUỘC đọc và tuân thủ trước khi thực hiện bất kỳ thay đổi nào",
+        "read_cursorrc": "BẮT BUỘC đọc kỹ toàn bộ .cursorrc trước khi sửa code",
+        "identify_rules": "BẮT BUỘC xác định tất cả các quy tắc liên quan đến file đang sửa",
+        "violation_consequence": "Không được phép thực hiện thay đổi nếu vi phạm nguyên tắc",
+        "verification_required": "BẮT BUỘC kiểm tra lại sau mỗi thay đổi",
+        "strict_violation": "BẮT BUỘC dừng ngay lập tức nếu phát hiện vi phạm quy tắc",
+        "no_excuses": "BẮT BUỘC không được đưa ra bất kỳ lý do nào để biện minh cho việc vi phạm",
+        "immediate_stop": "BẮT BUỘC dừng ngay lập tức khi người dùng phát hiện vi phạm"
+      },
+      "rules": {
+        "pre_check": {
+          "check_dependencies": "BẮT BUỘC kiểm tra cấu trúc module và dependencies trong .cursorrc",
+          "identify_patterns": "BẮT BUỘC xác định các quy tắc về: import order, thread safety, async patterns, error handling, type handling, caching patterns, testing requirements",
+          "no_violation": "BẮT BUỘC không được phép vi phạm bất kỳ quy tắc nào trong .cursorrc",
+          "no_self_judgment": "BẮT BUỘC không được tự ý đánh giá hoặc phủ nhận quy tắc",
+          "no_arbitrary_changes": "BẮT BUỘC không được tự ý thay đổi cấu trúc dự án",
+          "no_duplicate_modules": "BẮT BUỘC không được tạo module trùng lặp với module đã tồn tại",
+          "no_self_modification": "BẮT BUỘC không được tự ý sửa đổi .cursorrc",
+          "no_rule_interpretation": "BẮT BUỘC không được tự ý giải thích hoặc diễn giải quy tắc",
+          "no_rule_negotiation": "BẮT BUỘC không được thương lượng hoặc đề xuất thay đổi quy tắc",
+          "no_rule_override": "BẮT BUỘC không được ghi đè hoặc bỏ qua bất kỳ quy tắc nào"
+        },
+        "during_edit": {
+          "comprehensive_fix": "BẮT BUỘC không sửa từng phần riêng lẻ, phải áp dụng tất cả các quy tắc cùng một lúc",
+          "consistency_check": "BẮT BUỘC đảm bảo tính nhất quán giữa các file",
+          "cross_dependencies": "BẮT BUỘC kiểm tra cross-dependencies",
+          "apply_all_rules": "BẮT BUỘC áp dụng tất cả các quy tắc từ .cursorrc",
+          "no_rule_breaking": "BẮT BUỘC không được phá vỡ bất kỳ quy tắc nào",
+          "no_self_opinion": "BẮT BUỘC không được đưa ra ý kiến chủ quan",
+          "no_unauthorized_changes": "BẮT BUỘC không được thay đổi mà không được phép",
+          "no_rule_exception": "BẮT BUỘC không được tạo ngoại lệ cho bất kỳ quy tắc nào",
+          "no_rule_compromise": "BẮT BUỘC không được thỏa hiệp hoặc giảm nhẹ quy tắc",
+          "no_rule_adaptation": "BẮT BUỘC không được điều chỉnh quy tắc cho phù hợp với ý muốn"
+        },
+        "post_check": {
+          "run_clippy": "BẮT BUỘC chạy cargo clippy để kiểm tra lỗi",
+          "verify_rules": "BẮT BUỘC kiểm tra lại các quy tắc trong .cursorrc",
+          "no_new_errors": "BẮT BUỘC đảm bảo không tạo ra lỗi mới",
+          "consistency_verify": "BẮT BUỘC kiểm tra tính nhất quán của toàn bộ codebase",
+          "rule_compliance": "BẮT BUỘC xác nhận đã tuân thủ tất cả quy tắc",
+          "no_rule_violation": "BẮT BUỘC xác nhận không vi phạm quy tắc nào",
+          "no_rule_omission": "BẮT BUỘC không được bỏ qua bất kỳ quy tắc nào",
+          "no_rule_skipping": "BẮT BUỘC không được bỏ qua bất kỳ bước kiểm tra nào",
+          "no_rule_ignoring": "BẮT BUỘC không được phớt lờ bất kỳ quy tắc nào"
+        },
+        "checklist": {
+          "imports": [
+            "BẮT BUỘC import order đúng",
+            "BẮT BUỘC nhóm import theo nguồn gốc",
+            "BẮT BUỘC không có import không sử dụng",
+            "BẮT BUỘC không có import trùng lặp"
+          ],
+          "thread_safety": [
+            "BẮT BUỘC Send + Sync cho trait objects",
+            "BẮT BUỘC Arc<T> cho shared data",
+            "BẮT BUỘC RwLock/Mutex phù hợp",
+            "BẮT BUỘC Clone trước khi async"
+          ],
+          "error_handling": [
+            "BẮT BUỘC anyhow::Result cho thư viện",
+            "BẮT BUỘC Error context đầy đủ",
+            "BẮT BUỘC Retry policy phù hợp",
+            "BẮT BUỘC Circuit breaker khi cần"
+          ],
+          "type_handling": [
+            "BẮT BUỘC kiểu dữ liệu nhất quán",
+            "BẮT BUỘC xử lý Option/Result đúng cách",
+            "BẮT BUỘC Type conversion an toàn",
+            "BẮT BUỘC không có type coercion"
+          ],
+          "caching": [
+            "BẮT BUỘC CacheEntry struct đúng chuẩn",
+            "BẮT BUỘC TTL management",
+            "BẮT BUỘC Cache cleanup",
+            "BẮT BUỘC Thread safety cho cache"
+          ],
+          "testing": [
+            "BẮT BUỘC Unit test đầy đủ",
+            "BẮT BUỘC Test error paths",
+            "BẮT BUỘC Test edge cases",
+            "BẮT BUỘC Test documentation"
+          ],
+          "documentation": [
+            "BẮT BUỘC Doc comments đầy đủ",
+            "BẮT BUỘC Examples khi cần",
+            "BẮT BUỘC Error messages rõ ràng",
+            "BẮT BUỘC API documentation"
+          ],
+          "rule_compliance": [
+            "BẮT BUỘC tuân thủ tất cả quy tắc",
+            "BẮT BUỘC không vi phạm quy tắc",
+            "BẮT BUỘC không tự ý thay đổi",
+            "BẮT BUỘC không đánh giá chủ quan",
+            "BẮT BUỘC không tự ý sửa đổi .cursorrc",
+            "BẮT BUỘC không tự ý giải thích quy tắc",
+            "BẮT BUỘC không thương lượng quy tắc",
+            "BẮT BUỘC không ghi đè quy tắc",
+            "BẮT BUỘC không bỏ qua quy tắc",
+            "BẮT BUỘC không phớt lờ quy tắc"
+          ]
+        }
+      }
+    }
+  },
+  
   "project": {
     "name": "Diamondchain - SnipeBot DeFi",
     "description": "Bot giao dịch DeFi thông minh hỗ trợ đa blockchain với các tính năng cao cấp",
@@ -7,80 +117,22 @@
     "license": "MIT",
     "year": "2023"
   },
-  "code_conventions": {
-    "naming": {
-      "variables": "snake_case",
-      "functions": "snake_case",
-      "types": "PascalCase",
-      "constants": "SCREAMING_SNAKE_CASE",
-      "modules": "snake_case"
-    },
-    "formatting": {
-      "indentation": 4,
-      "line_length": 100,
-      "trailing_comma": true
-    },
-    "comments": {
-      "functions": "/// Mô tả chức năng của hàm",
-      "structs": "/// Cấu trúc lưu trữ dữ liệu",
-      "file_header": "// Diamondchain - Copyright (c)"
-    },
-    "async_patterns": {
-      "error_handling": "Sử dụng anyhow::Result và ? operator",
-      "retry": "Sử dụng retry_policy và exponential backoff",
-      "timeout": "Sử dụng tokio::time::timeout cho các thao tác có thể bị treo",
-      "thread_safety": {
-        "trait_bounds": "Luôn thêm Send + Sync + 'static cho các trait objects trong async context",
-        "closure_bounds": "Thêm Send + Sync cho các closure được truyền qua thread",
-        "async_trait": "Sử dụng #[async_trait] cho các trait có phương thức async",
-        "clone_before_async": "Clone dữ liệu trước khi đưa vào closure async để tránh vấn đề lifetime",
-        "standalone_functions": "Sử dụng hàm độc lập thay vì closure để đảm bảo kiểu fn pointer phù hợp",
-        "arc_usage": "Sử dụng Arc<T> để chia sẻ dữ liệu giữa các task",
-        "mutex_rwlock": "Sử dụng Mutex cho write frequent, RwLock cho read frequent",
-        "tokio_types": "Ưu tiên sử dụng tokio::sync::Mutex thay vì std::sync::Mutex trong async code"
-      }
-    },
-    "traits": {
-      "trait_bounds": "Luôn thêm Send + Sync + 'static cho trait objects được sử dụng qua Arc hoặc trong multithreaded context",
-      "object_safety": "Kiểm tra object safety cho các trait (không có generic type parameters, không có Sized bound)",
-      "trait_implementation": "Triển khai đầy đủ tất cả các phương thức bắt buộc",
-      "explicit_bounds": "Chỉ rõ bounds như Send + Sync + 'static khi khai báo trait dùng trong context đa luồng",
-      "async_trait_macro": "Sử dụng #[async_trait] cho các trait có phương thức async",
-      "trait_object_usage": "Sử dụng Box<dyn Trait> cho các trait object có phương thức async"
-    },
-    "structs": {
-      "field_initialization": "Khởi tạo đầy đủ tất cả các trường của struct",
-      "default_values": "Cung cấp Default impl hoặc builder pattern cho struct phức tạp",
-      "field_naming": "Đảm bảo tên trường nhất quán giữa các phiên bản struct",
-      "field_documentation": "Thêm doc comments cho các trường phức tạp",
-      "constructor_params": "Kiểm tra các tham số đầu vào của hàm khởi tạo",
-      "unified_struct_definition": "Đảm bảo chỉ có một định nghĩa struct trong toàn bộ codebase, sử dụng type alias nếu cần",
-      "consistent_field_types": "Sử dụng kiểu dữ liệu nhất quán cho các trường có cùng mục đích",
-      "complete_initialization": "Đảm bảo tất cả các trường đều được khởi tạo trong hàm new()"
-    },
-    "caching": {
-      "standard_cache_entry": "Sử dụng struct CacheEntry có các trường value và expires_at",
-      "cache_synchronization": "Sử dụng RwLock cho đồng bộ hóa cache trong môi trường đa luồng",
-      "cache_method_naming": "Đặt tên các phương thức cache là get_from_cache và store_in_cache",
-      "consistent_cache_ttl": "Sử dụng TTL nhất quán và có thể cấu hình cho các entry cache",
-      "cache_cleanup": "Triển khai phương thức cleanup_cache để định kỳ xóa các entry hết hạn",
-      "standard_entry": {
-        "struct": "pub struct CacheEntry<T> { pub value: T, pub expires_at: Instant }",
-        "methods": [
-          "new(value: T, ttl_seconds: u64) -> Self",
-          "is_expired(&self) -> bool"
-        ]
+  
+  "patterns": {
+    "*": {
+      "naming": {
+        "variables": "snake_case",
+        "functions": "snake_case",
+        "types": "PascalCase",
+        "constants": "SCREAMING_SNAKE_CASE",
+        "modules": "snake_case"
       },
-      "cache_field": "cache: RwLock<HashMap<String, CacheEntry<T>>>",
-      "cache_methods": [
-        "get_from_cache<T>(&self, key: &str) -> Option<T>",
-        "store_in_cache<T>(&self, key: &str, value: &T, ttl_seconds: u64) -> Result<()>",
-        "cleanup_cache(&self)"
-      ],
-      "ttl_management": "Sử dụng Instant::now() + Duration::from_secs(ttl) cho expires_at"
-    },
-    "imports": {
-      "organization": {
+      "formatting": {
+        "indentation": 4,
+        "line_length": 100,
+        "trailing_comma": true
+      },
+      "imports": {
         "order": [
           "// External imports",
           "use ethers::{...};",
@@ -97,747 +149,1044 @@
         ],
         "grouping": "Nhóm các import theo nguồn gốc và chức năng",
         "nesting": "Sử dụng nested imports để giảm số lượng dòng",
-        "explicit_imports": "Import trực tiếp từ module gốc thay vì re-export"
-      },
-      "cleanup": {
+        "explicit_imports": "Import trực tiếp từ module gốc trong các file source",
+        "reexports": "Sử dụng re-export có chọn lọc trong mod.rs để tổ chức module",
         "unused_imports": "Xóa các import không sử dụng",
-        "duplicate_imports": "Gộp các import trùng lặp",
-        "reexports": "Sử dụng re-export có chọn lọc trong mod.rs"
+        "self_import": "Không sử dụng self trong import trừ khi cần thiết",
+        "single_component": "Không import trực tiếp từ crate root (ví dụ: use tokio;)",
+        "redundant_imports": "Xóa các import trùng lặp hoặc thừa"
+      },
+      "error_handling": {
+        "unwrap": "Tránh dùng .unwrap(), .expect() trừ khi có lý do chính đáng",
+        "unused_imports": "Loại bỏ use xxx không được dùng sau khi refactor",
+        "trailing_whitespace": "Không được để trailing whitespace hoặc dòng trắng dư cuối file",
+        "redundant_clone": "Tránh redundant clone/copy nếu không cần thiết"
       }
     },
-    "module_organization": {
-      "single_definition": "Mỗi struct/trait chỉ được định nghĩa một lần trong codebase",
-      "clear_hierarchy": "Tổ chức các module theo cấu trúc rõ ràng",
-      "explicit_exports": "Chỉ rõ các item được export trong mod.rs",
-      "avoid_circular": "Tránh import vòng tròn giữa các module"
+    
+    "async": {
+      "*": {
+        "error_handling": "Sử dụng anyhow::Result và ? operator",
+        "retry": "Sử dụng retry_policy và exponential backoff",
+        "timeout": "Sử dụng tokio::time::timeout cho các thao tác có thể bị treo"
+      },
+      "thread_safety": {
+        "trait_bounds": "Luôn thêm Send + Sync + 'static cho các trait objects trong async context",
+        "closure_bounds": "Thêm Send + Sync cho các closure được truyền qua thread",
+        "async_trait": "Sử dụng #[async_trait] cho các trait có phương thức async",
+        "clone_before_async": "Clone dữ liệu trước khi đưa vào closure async để tránh vấn đề lifetime",
+        "standalone_functions": "Sử dụng hàm độc lập thay vì closure để đảm bảo kiểu fn pointer phù hợp",
+        "arc_usage": "Sử dụng Arc<T> để chia sẻ dữ liệu giữa các task",
+        "mutex_rwlock": "Sử dụng Mutex cho write frequent, RwLock cho read frequent",
+        "tokio_types": "Ưu tiên sử dụng tokio::sync::Mutex thay vì std::sync::Mutex trong async code"
+      }
     },
+    
+    "traits": {
+      "*": {
+        "trait_bounds": "Luôn thêm Send + Sync + 'static cho trait objects được sử dụng qua Arc hoặc trong multithreaded context",
+        "object_safety": "Kiểm tra object safety cho các trait (không có generic type parameters, không có Sized bound)",
+        "trait_implementation": "Triển khai đầy đủ tất cả các phương thức bắt buộc",
+        "explicit_bounds": "Chỉ rõ bounds như Send + Sync + 'static khi khai báo trait dùng trong context đa luồng",
+        "async_trait_macro": "Sử dụng #[async_trait] cho các trait có phương thức async",
+        "trait_object_usage": "Sử dụng Box<dyn Trait> cho các trait object có phương thức async",
+        "result_type": "Luôn chỉ rõ cả 2 generic type cho Result<T, E>",
+        "async_trait_import": "Luôn import async_trait::async_trait trước khi sử dụng #[async_trait]",
+        "async_trait_macro": "Sử dụng #[async_trait] cho các trait có phương thức async",
+        "trait_object_usage": "Sử dụng Box<dyn Trait> cho các trait object có phương thức async"
+      }
+    },
+    
+    "structs": {
+      "*": {
+        "field_initialization": "Khởi tạo đầy đủ tất cả các trường của struct",
+        "default_values": "Cung cấp Default impl hoặc builder pattern cho struct phức tạp",
+        "field_naming": "Đảm bảo tên trường nhất quán giữa các phiên bản struct",
+        "field_documentation": "Thêm doc comments cho các trường phức tạp",
+        "constructor_params": "Kiểm tra các tham số đầu vào của hàm khởi tạo",
+        "unified_struct_definition": "Đảm bảo chỉ có một định nghĩa struct trong toàn bộ codebase, sử dụng type alias nếu cần",
+        "consistent_field_types": "Sử dụng kiểu dữ liệu nhất quán cho các trường có cùng mục đích",
+        "complete_initialization": "Đảm bảo tất cả các trường đều được khởi tạo trong hàm new()"
+      }
+    },
+    
+    "caching": {
+      "*": {
+        "standard_cache_entry": "Sử dụng struct CacheEntry có các trường value và expires_at",
+        "cache_synchronization": "Sử dụng RwLock cho đồng bộ hóa cache trong môi trường đa luồng",
+        "cache_method_naming": "Đặt tên các phương thức cache là get_from_cache và store_in_cache",
+        "consistent_cache_ttl": "Sử dụng TTL nhất quán và có thể cấu hình cho các entry cache",
+        "cache_cleanup": "Triển khai phương thức cleanup_cache để định kỳ xóa các entry hết hạn"
+      },
+      "standard_entry": {
+        "struct": "pub struct CacheEntry<T> { pub value: T, pub expires_at: Instant }",
+        "methods": [
+          "new(value: T, ttl_seconds: u64) -> Self",
+          "is_expired(&self) -> bool"
+        ]
+      },
+      "cache_field": "cache: RwLock<HashMap<String, CacheEntry<T>>>",
+      "cache_methods": [
+        "get_from_cache<T>(&self, key: &str) -> Option<T>",
+        "store_in_cache<T>(&self, key: &str, value: &T, ttl_seconds: u64) -> Result<()>",
+        "cleanup_cache(&self)"
+      ],
+      "ttl_management": "Sử dụng Instant::now() + Duration::from_secs(ttl) cho expires_at"
+    },
+    
     "error_handling": {
-      "error_types": {
-        "blockchain_errors": "Sử dụng enum BlockchainError để phân loại lỗi blockchain",
-        "retryable_errors": "Xác định rõ các lỗi có thể retry (timeout, connection refused, rate limit)",
-        "non_retryable_errors": "Xác định rõ các lỗi không thể retry (insufficient funds, invalid nonce)",
-        "error_context": "Thêm context cho lỗi với .context() hoặc with_context()"
-      },
-      "error_propagation": {
-        "use_anyhow": "Sử dụng anyhow::Result cho các hàm thư viện",
-        "use_thiserror": "Sử dụng thiserror cho các enum lỗi public",
-        "error_transmutation": "Chuyển đổi lỗi cụ thể thành anyhow::Error khi cần",
-        "error_wrapping": "Bọc lỗi với context thích hợp trước khi truyền lên"
-      },
-      "error_recovery": {
-        "circuit_breaker": "Sử dụng circuit breaker để tránh thử lại quá nhiều",
-        "fallback_providers": "Có sẵn danh sách provider dự phòng",
-        "gas_adjustment": "Tự động điều chỉnh gas price dựa trên loại lỗi",
-        "nonce_management": "Quản lý nonce đúng cách để tránh lỗi invalid nonce"
+      "*": {
+        "error_types": {
+          "blockchain_errors": "Sử dụng enum BlockchainError để phân loại lỗi blockchain",
+          "retryable_errors": "Xác định rõ các lỗi có thể retry (timeout, connection refused, rate limit)",
+          "non_retryable_errors": "Xác định rõ các lỗi không thể retry (insufficient funds, invalid nonce)",
+          "error_context": "Sử dụng context() hoặc with_context() để thêm thông tin cho lỗi",
+          "error_categories": "Phân loại lỗi thành các nhóm rõ ràng",
+          "error_severity": "Xác định mức độ nghiêm trọng của lỗi",
+          "error_recovery": "Xác định chiến lược phục hồi cho từng loại lỗi",
+          "error_metrics": "Thu thập metrics về các loại lỗi"
+        },
+        "error_propagation": {
+          "use_anyhow": "Sử dụng anyhow::Result cho các hàm thư viện",
+          "use_thiserror": "Sử dụng thiserror cho các enum lỗi public",
+          "error_transmutation": "Chuyển đổi lỗi cụ thể thành anyhow::Error khi cần",
+          "error_wrapping": "Bọc lỗi với context thích hợp trước khi truyền lên",
+          "error_logging": "Log đầy đủ thông tin lỗi và stack trace",
+          "error_tracing": "Sử dụng tracing để theo dõi luồng lỗi",
+          "error_metrics": "Thu thập metrics về lỗi",
+          "error_alerting": "Cảnh báo khi có lỗi nghiêm trọng"
+        },
+        "error_recovery": {
+          "circuit_breaker": "Sử dụng circuit breaker để tránh thử lại quá nhiều",
+          "fallback_providers": "Có sẵn danh sách provider dự phòng",
+          "gas_adjustment": "Tự động điều chỉnh gas price dựa trên loại lỗi",
+          "nonce_management": "Quản lý nonce đúng cách để tránh lỗi invalid nonce",
+          "retry_strategy": "Xác định chiến lược retry cho từng loại lỗi",
+          "backoff_strategy": "Sử dụng exponential backoff với jitter",
+          "timeout_handling": "Xử lý timeout đúng cách",
+          "rate_limit_handling": "Xử lý rate limit đúng cách"
+        },
+        "result_type": "Sử dụng anyhow::Result cho các hàm thư viện, Result<T, E> cho các enum lỗi public"
       }
     },
+    
     "retry_policy": {
-      "configuration": {
-        "max_retries": "Giới hạn số lần retry tối đa (mặc định: 5)",
-        "backoff_strategy": "Sử dụng exponential backoff với jitter",
-        "max_retry_time": "Giới hạn thời gian retry tổng cộng",
-        "retryable_errors": "Danh sách các lỗi có thể retry",
-        "circuit_breaker": "Cấu hình circuit breaker cho từng endpoint"
-      },
-      "implementation": {
-        "exponential_backoff": "Sử dụng exponential backoff với jitter ngẫu nhiên",
-        "circuit_breaker": "Triển khai circuit breaker để tránh thử lại quá nhiều",
-        "metrics_collection": "Thu thập metrics về retry (số lần, thời gian, loại lỗi)",
-        "logging": "Ghi log chi tiết về các lần retry",
-        "gas_optimization": "Tự động điều chỉnh gas price dựa trên loại lỗi"
-      },
-      "best_practices": {
-        "clone_before_retry": "Clone dữ liệu trước khi retry để tránh vấn đề lifetime",
-        "separate_retry_logic": "Tách logic retry thành module riêng",
-        "use_async_trait": "Sử dụng #[async_trait] cho các trait có phương thức async",
-        "proper_error_handling": "Xử lý lỗi đúng cách trong quá trình retry",
-        "metrics_tracking": "Theo dõi metrics về hiệu suất retry"
+      "*": {
+        "configuration": {
+          "max_retries": "Giới hạn số lần retry tối đa (mặc định: 5)",
+          "backoff_strategy": "Sử dụng exponential backoff với jitter",
+          "max_retry_time": "Giới hạn thời gian retry tổng cộng",
+          "retryable_errors": "Danh sách các lỗi có thể retry",
+          "circuit_breaker": "Cấu hình circuit breaker cho từng endpoint"
+        },
+        "implementation": {
+          "exponential_backoff": "Sử dụng exponential backoff với jitter ngẫu nhiên",
+          "circuit_breaker": "Triển khai circuit breaker để tránh thử lại quá nhiều",
+          "metrics_collection": "Thu thập metrics về retry (số lần, thời gian, loại lỗi)",
+          "logging": "Ghi log chi tiết về các lần retry",
+          "gas_optimization": "Tự động điều chỉnh gas price dựa trên loại lỗi"
+        },
+        "best_practices": {
+          "clone_before_retry": "Clone dữ liệu trước khi retry để tránh vấn đề lifetime",
+          "separate_retry_logic": "Tách logic retry thành module riêng",
+          "use_async_trait": "Sử dụng #[async_trait] cho các trait có phương thức async",
+          "proper_error_handling": "Xử lý lỗi đúng cách trong quá trình retry",
+          "metrics_tracking": "Theo dõi metrics về hiệu suất retry"
+        }
       }
     },
-    "metrics": {
-      "retry_metrics": {
-        "successful_retries": "Số lần retry thành công",
-        "failed_retries": "Số lần retry thất bại",
-        "avg_retry_delay": "Thời gian trung bình giữa các lần retry",
-        "circuit_breaker_stats": "Thống kê về trạng thái circuit breaker",
-        "error_types": "Phân loại lỗi theo loại"
-      },
-      "collection": {
-        "use_metrics_crate": "Sử dụng metrics crate để thu thập metrics",
-        "counter_usage": "Sử dụng counter cho các sự kiện đếm được",
-        "gauge_usage": "Sử dụng gauge cho các giá trị thay đổi",
-        "histogram_usage": "Sử dụng histogram cho các giá trị phân phối",
-        "labels": "Thêm labels phù hợp cho metrics"
+    
+    "security": {
+      "*": {
+        "encryption": {
+          "aes_gcm": "Sử dụng AES-GCM theo đúng chuẩn với nonce duy nhất",
+          "argon2id": "Triển khai đúng Argon2id để bảo vệ mật khẩu",
+          "key_management": "Sử dụng KeyInit thay vì NewAead đã lỗi thời"
+        },
+        "sensitive_data": {
+          "zeroize": "Sử dụng Zeroize và ZeroizeOnDrop đúng cách",
+          "memory_cleanup": "Triển khai Drop để xóa dữ liệu từ bộ nhớ",
+          "no_public_sensitive": "Tránh public các thuộc tính nhạy cảm"
+        },
+        "authentication": {
+          "format_checking": "Kiểm tra format tốt hơn cho private key và địa chỉ",
+          "error_messages": "Xử lý lỗi chi tiết hơn với thông báo rõ ràng"
+        }
+      }
+    },
+    
+    "performance": {
+      "*": {
+        "caching": {
+          "wallet_cache": "Sử dụng HashMap để lưu cache các ví đã tải",
+          "lazy_loading": "Chỉ tải từ storage khi cần thiết",
+          "cache_ttl": "Thiết lập thời gian sống cho cache entries"
+        },
+        "error_handling": {
+          "error_classification": "Phân loại lỗi để quyết định có thử lại không",
+          "error_suggestions": "Cung cấp gợi ý khắc phục lỗi chi tiết"
+        },
+        "thread_safety": {
+          "rwlock_usage": "Sử dụng RwLock cho đọc song song, ghi độc quyền",
+          "async_mutex": "Sử dụng AsyncMutex cho các operation bất đồng bộ",
+          "semaphore": "Sử dụng semaphore để giới hạn số lượng tác vụ chạy đồng thời"
+        }
+      }
+    },
+    
+    "testing": {
+      "*": {
+        "unit_tests": {
+          "coverage": "Kiểm thử tất cả path code",
+          "fuzzing": "Sử dụng fuzzing test để phát hiện lỗi logic",
+          "error_paths": "Kiểm thử các path lỗi và edge cases"
+        },
+        "logging": {
+          "operation_logs": "Thêm log chi tiết cho các operation quan trọng",
+          "debug_info": "Cung cấp thông tin để debug khi cần",
+          "error_tracing": "Log đầy đủ thông tin lỗi và stack trace"
+        }
+      }
+    },
+    
+    "mev_protection": {
+      "*": {
+        "detection": {
+          "sandwich_attack": "Triển khai heuristics để phát hiện sandwich attack",
+          "frontrunning": "Phát hiện frontrunning dựa trên gas price và thứ tự giao dịch",
+          "arbitrage": "Phát hiện arbitrage dựa trên mẫu giao dịch"
+        },
+        "prevention": {
+          "gas_optimization": "Tối ưu gas price để tránh frontrunning",
+          "transaction_ordering": "Quản lý thứ tự giao dịch để tránh sandwich",
+          "slippage_protection": "Bảo vệ khỏi slippage cao"
+        }
+      }
+    },
+    
+    "nonce_management": {
+      "*": {
+        "implementation": {
+          "nonce_manager": "Triển khai NonceManager để quản lý nonce",
+          "auto_reset": "Tự động reset nonce khi gặp lỗi nonce",
+          "caching": "Cache nonce với thời gian hết hạn",
+          "integration": "Tích hợp với ChainAdapter để quản lý giao dịch"
+        },
+        "error_handling": {
+          "duplicate_detection": "Phát hiện và xử lý giao dịch trùng lặp",
+          "nonce_error_recovery": "Cơ chế phục hồi khi gặp lỗi nonce",
+          "retry_strategy": "Chiến lược retry cho lỗi nonce"
+        }
+      }
+    },
+    
+    "time_handling": {
+      "*": {
+        "implementation": {
+          "safe_timestamp": "Xử lý an toàn khi lấy timestamp",
+          "fallback_values": "Cung cấp giá trị mặc định an toàn",
+          "error_handling": "Xử lý lỗi khi không thể lấy thời gian hệ thống"
+        },
+        "conversion": {
+          "safe_conversion": "Kiểm tra giới hạn và tràn số khi chuyển đổi",
+          "saturating_ops": "Sử dụng saturating_sub để ngăn tràn số",
+          "nan_handling": "Xử lý các giá trị f64 không hợp lệ"
+        }
+      }
+    },
+    
+    "ethers_types": {
+      "*": {
+        "u64_handling": "Không sử dụng map() trực tiếp trên U64, sử dụng as_u64() để chuyển đổi",
+        "h160_handling": "Không sử dụng unwrap_or_default() trên H160, sử dụng map() để xử lý Option",
+        "u256_handling": "Sử dụng U256::zero() thay vì U256::from(0)",
+        "address_handling": "Sử dụng to_string() để chuyển đổi Address thành String",
+        "hash_handling": "Sử dụng to_string() để chuyển đổi H256 thành String"
+      }
+    },
+    
+    "variables": {
+      "*": {
+        "unused_variables": "Đặt tên biến không sử dụng với tiền tố _",
+        "variable_naming": "Sử dụng snake_case cho tên biến",
+        "variable_scope": "Giới hạn phạm vi biến trong scope nhỏ nhất có thể",
+        "variable_initialization": "Khởi tạo biến với giá trị mặc định hợp lý"
       }
     }
   },
-  "common_data_types": {
-    "blockchain": [
-      "Address - ethers::types::Address",
-      "U256 - ethers::types::U256",
-      "H256 - ethers::types::H256",
-      "TransactionReceipt - ethers::types::TransactionReceipt",
-      "Provider<Http> - ethers::providers::Provider<Http>",
-      "Contract<Provider<Http>> - ethers::contract::Contract<Provider<Http>>",
-      "TypedTransaction - ethers::types::transaction::eip2718::TypedTransaction",
-      "TransactionRequest - ethers::types::TransactionRequest"
-    ],
-    "custom": [
-      "ChainConfig - Cấu hình cho blockchain",
-      "ChainAdapter - Interface cho các blockchain khác nhau",
-      "EVMAdapter - Adapter cho mạng EVM",
-      "Transaction - Thông tin giao dịch blockchain",
-      "WalletConfig - Cấu hình ví",
-      "EndpointInfo - Thông tin RPC endpoint",
-      "RetryPolicy - Chính sách thử lại cho RPC",
-      "RPCConnectionPool - Pool kết nối RPC",
-      "AIModel - Interface cho các mô hình AI",
-      "TokenInfo - Thông tin token",
-      "Config - Cấu hình chung của ứng dụng",
-      "RetryConfig - Cấu hình cho retry policy",
-      "RiskAnalyzer - Phân tích rủi ro token (trait object yêu cầu Send + Sync)",
-      "TokenRiskAnalysis - Kết quả phân tích rủi ro token"
-    ],
-    "collections": [
-      "HashMap<K, V> - Bảng băm key-value",
-      "Vec<T> - Danh sách linh động",
-      "Option<T> - Giá trị tùy chọn",
-      "Result<T, E> - Kết quả có thể lỗi",
-      "Arc<T> - Atomic reference counted pointer",
-      "RwLock<T> - Reader-writer lock",
-      "Mutex<T> - Mutual exclusion primitive",
-      "VecDeque<T> - Double-ended queue",
-      "Weak<T> - Weak reference to Arc<T>"
-    ]
+  
+  "types": {
+    "blockchain": {
+      "*": [
+        "Address - ethers::types::Address",
+        "U256 - ethers::types::U256",
+        "H256 - ethers::types::H256",
+        "TransactionReceipt - ethers::types::TransactionReceipt",
+        "Provider<Http> - ethers::providers::Provider<Http>",
+        "Contract<Provider<Http>> - ethers::contract::Contract<Provider<Http>>",
+        "TypedTransaction - ethers::types::transaction::eip2718::TypedTransaction",
+        "TransactionRequest - ethers::types::TransactionRequest"
+      ]
+    },
+    "custom": {
+      "*": [
+        "ChainConfig - Cấu hình cho blockchain",
+        "ChainAdapter - Interface cho các blockchain khác nhau",
+        "EVMAdapter - Adapter cho mạng EVM",
+        "Transaction - Thông tin giao dịch blockchain",
+        "WalletConfig - Cấu hình ví",
+        "EndpointInfo - Thông tin RPC endpoint",
+        "RetryPolicy - Chính sách thử lại cho RPC",
+        "RPCConnectionPool - Pool kết nối RPC",
+        "AIModel - Interface cho các mô hình AI",
+        "TokenInfo - Thông tin token",
+        "Config - Cấu hình chung của ứng dụng",
+        "RetryConfig - Cấu hình cho retry policy",
+        "RiskAnalyzer - Phân tích rủi ro token (trait object yêu cầu Send + Sync)",
+        "TokenRiskAnalysis - Kết quả phân tích rủi ro token"
+      ]
+    },
+    "collections": {
+      "*": [
+        "HashMap<K, V> - Bảng băm key-value",
+        "Vec<T> - Danh sách linh động",
+        "Option<T> - Giá trị tùy chọn",
+        "Result<T, E> - Kết quả có thể lỗi",
+        "Arc<T> - Atomic reference counted pointer",
+        "RwLock<T> - Reader-writer lock",
+        "Mutex<T> - Mutual exclusion primitive",
+        "VecDeque<T> - Double-ended queue",
+        "Weak<T> - Weak reference to Arc<T>"
+      ]
+    }
   },
+  
   "modules": {
-    "chain_adapters": "Các adapter cho các blockchain khác nhau",
-    "wallet": "Quản lý ví và khóa bảo mật",
-    "blockchain": "Tương tác với blockchain",
-    "network": "Kết nối mạng và RPC",
-    "snipebot": "Bot giao dịch tự động",
-    "common": "Các tiện ích và cấu trúc dữ liệu chung",
-    "middleware": "Các middleware cho API",
-    "ai": "Các mô hình AI và phân tích dữ liệu",
-    "diamond_manager": "Quản trị hệ thống và hợp đồng Diamond",
-    "connections": "Quản lý các kết nối RPC",
-    "utils": "Tiện ích và hàm hỗ trợ",
-    "error_handling": "Xử lý lỗi và retry",
-    "api": "RESTful API endpoints",
-    "risk_analyzer": "Phân tích rủi ro token",
-    "MonteEquilibrium": "Tối ưu hóa giao dịch theo lý thuyết trò chơi"
+    "*": {
+      "chain_adapters": {
+        "description": "Các adapter cho các blockchain khác nhau",
+        "dependencies": [
+          "common/src/chain_adapter.rs",
+          "common/src/types.rs",
+          "common/src/error.rs"
+        ],
+        "rules": {
+          "mod_resolution": "Mỗi mod xxx; phải dẫn tới đúng file/module tương ứng (xxx.rs hoặc xxx/mod.rs)",
+          "violation_consequence": "Không được phép merge nếu mod không resolve được"
+        }
+      },
+      "wallet": {
+        "description": "Quản lý ví và khóa bảo mật",
+        "dependencies": [
+          "common/src/security.rs",
+          "common/src/types.rs",
+          "common/src/error.rs",
+          "wallet/src/secure_storage.rs",
+          "wallet/src/wallet.rs",
+          "wallet/src/farm.rs",
+          "wallet/src/defi.rs",
+          "wallet/src/config.rs"
+        ]
+      },
+      "blockchain": {
+        "description": "Tương tác với blockchain",
+        "dependencies": [
+          "common/src/chain_adapter.rs",
+          "common/src/network.rs",
+          "common/src/types.rs",
+          "blockchain/src/lib.rs",
+          "blockchain/src/mining/",
+          "blockchain/src/grpc/",
+          "blockchain/src/farming/",
+          "blockchain/src/diamond_token/",
+          "blockchain/src/depin/",
+          "blockchain/src/crosschain/",
+          "blockchain/src/abi/",
+          "blockchain/src/marketplace/",
+          "blockchain/src/nft/"
+        ]
+      },
+      "network": {
+        "description": "Kết nối mạng và RPC",
+        "dependencies": [
+          "common/src/network.rs",
+          "common/src/retry_policy.rs",
+          "common/src/error.rs"
+        ]
+      },
+      "snipebot": {
+        "description": "Bot giao dịch tự động",
+        "dependencies": [
+          "common/src/task_manager.rs",
+          "common/src/worker.rs",
+          "common/src/scheduler.rs",
+          "common/src/executor.rs",
+          "snipebot/src/trade_logic.rs",
+          "snipebot/src/snipebot.rs",
+          "snipebot/src/token_status.rs",
+          "snipebot/src/cache.rs",
+          "snipebot/src/api.rs",
+          "snipebot/src/types.rs",
+          "snipebot/src/auto_tuning.rs",
+          "snipebot/src/storage.rs",
+          "snipebot/src/error_handling.rs",
+          "snipebot/src/mempool.rs",
+          "snipebot/src/gas_optimizer.rs",
+          "snipebot/src/middleware.rs",
+          "snipebot/src/risk_analyzer.rs",
+          "snipebot/src/rate_limit.rs",
+          "snipebot/src/user.rs",
+          "snipebot/src/network.rs",
+          "snipebot/src/wallet.rs",
+          "snipebot/src/transaction.rs",
+          "snipebot/src/MonteEquilibrium.rs",
+          "snipebot/src/AIModule.rs",
+          "snipebot/src/auto_tuning_manager.rs",
+          "snipebot/src/retry_manager.rs",
+          "snipebot/src/endpoint_manager.rs",
+          "snipebot/src/connection_manager.rs",
+          "snipebot/src/risk_analysis.rs",
+          "snipebot/src/TradeManager.rs",
+          "snipebot/src/flashbots.rs",
+          "snipebot/src/blockchain.rs",
+          "snipebot/src/contracts.rs",
+          "common/src/executor.rs"
+        ]
+      },
+      "common": {
+        "description": "Các tiện ích và cấu trúc dữ liệu chung",
+        "dependencies": [
+          "common/src/types.rs",
+          "common/src/utils.rs",
+          "common/src/chain_adapter.rs",
+          "common/src/lib.rs",
+          "common/src/error_handler.rs",
+          "common/src/worker.rs",
+          "common/src/validator.rs",
+          "common/src/executor.rs",
+          "common/src/scheduler.rs",
+          "common/src/state_manager.rs",
+          "common/src/task_manager.rs",
+          "common/src/config.rs",
+          "common/src/event_handler.rs",
+          "common/src/security.rs",
+          "common/src/logger.rs",
+          "common/src/metrics.rs",
+          "common/src/cache.rs",
+          "common/src/equilibrium.rs",
+          "common/src/middleware.rs",
+          "common/src/risk_analyzer.rs",
+          "common/src/network.rs",
+          "common/src/models.rs",
+          "common/src/error.rs",
+          "common/src/retry_policy.rs",
+          "common/src/diamond_manager.rs",
+          "common/src/ai.rs",
+          "common/src/monte_equilibrium.rs",
+          "common/src/models/",
+          "common/src/network/",
+          "common/src/middleware/",
+          "common/src/utils/",
+          "common/src/chain_adapter/"
+        ]
+      },
+      "middleware": {
+        "description": "Các middleware cho API",
+        "dependencies": [
+          "common/src/middleware.rs",
+          "common/src/error.rs"
+        ]
+      },
+      "ai": {
+        "description": "Các mô hình AI và phân tích dữ liệu",
+        "dependencies": [
+          "common/src/types.rs",
+          "common/src/models.rs",
+          "common/src/error.rs"
+        ]
+      },
+      "diamond_manager": {
+        "description": "Quản trị hệ thống và hợp đồng Diamond",
+        "dependencies": [
+          "common/src/chain_adapter.rs",
+          "common/src/types.rs",
+          "common/src/error.rs"
+        ]
+      },
+      "connections": {
+        "description": "Quản lý các kết nối RPC",
+        "dependencies": [
+          "common/src/network.rs",
+          "common/src/retry_policy.rs",
+          "common/src/error.rs"
+        ]
+      },
+      "utils": {
+        "description": "Tiện ích và hàm hỗ trợ",
+        "dependencies": [
+          "common/src/utils.rs",
+          "common/src/types.rs",
+          "common/src/error.rs"
+        ]
+      },
+      "error_handling": {
+        "description": "Xử lý lỗi và retry",
+        "dependencies": [
+          "common/src/error.rs",
+          "common/src/retry_policy.rs",
+          "common/src/error_handler.rs"
+        ]
+      },
+      "api": {
+        "description": "RESTful API endpoints",
+        "dependencies": [
+          "common/src/types.rs",
+          "common/src/models.rs",
+          "common/src/error.rs"
+        ]
+      },
+      "risk_analyzer": {
+        "description": "Phân tích rủi ro token",
+        "dependencies": [
+          "common/src/risk_analyzer.rs",
+          "common/src/types.rs",
+          "common/src/error.rs"
+        ]
+      },
+      "MonteEquilibrium": {
+        "description": "Tối ưu hóa giao dịch theo lý thuyết trò chơi",
+        "dependencies": [
+          "common/src/equilibrium.rs",
+          "common/src/types.rs",
+          "common/src/error.rs"
+        ]
+      }
+    }
   },
+  
   "editor": {
-    "tab_size": 4,
-    "ruler": 100,
-    "formatOnSave": true,
-    "match_extensions": [".rs", ".toml"],
-    "ignored_folders": ["target", ".git", "logs"]
-  },
-  "powershell_commands": {
-    "cargo_clippy": "cd {directory}; cargo clippy --package {package} --lib -- -D warnings",
-    "cargo_clippy_all": "cargo clippy -- -D warnings",
-    "cargo_build": "cd {directory}; cargo build",
-    "cargo_test": "cd {directory}; cargo test",
-    "cargo_run": "cd {directory}; cargo run",
-    "cargo_check": "cd {directory}; cargo check",
-    "cargo_fmt": "cd {directory}; cargo fmt",
-    "cargo_fix": "cd {directory}; cargo fix --allow-dirty"
-  },
-  "project_structure": {
-    "workspace": {
-      "common": "Thư viện chung và utilities",
-      "blockchain": "Tương tác với blockchain, Quản lý EIP-2535",
-      "wallet": "Quản lý ví an toàn",
-      "snipebot": "Core logic của bot",
-      "network/wasm": "WebAssembly cho giao tiếp mạng",
-      "diamond_manager": "Quản trị hệ thống",
-      "frontend": "Giao diện người dùng web"
-    },
-    "snipebot": {
-      "chain_adapters": "Adapter cho các blockchain",
-      "api": "RESTful API endpoints",
-      "trade_logic": "Logic giao dịch chính",
-      "gas_optimizer": "Tối ưu hóa gas",
-      "mempool": "Theo dõi mempool",
-      "flashbots": "Tương tác với Flashbots",
-      "retry_policy": "Xử lý thử lại RPC calls",
-      "connection_pool": "Quản lý pool kết nối RPC",
-      "token_status": "Quản lý trạng thái token",
-      "rate_limit": "Giới hạn tỷ lệ request",
-      "auto_tuning": "Tự động điều chỉnh tham số",
-      "risk_analyzer": "Phân tích rủi ro token",
-      "MonteEquilibrium": "Tối ưu hóa chiến lược giao dịch"
-    },
-    "chain_adapters": {
-      "base": "Các lớp adapter cơ bản",
-      "ethereum": "Adapter cho Ethereum",
-      "bsc": "Adapter cho Binance Smart Chain",
-      "avalanche": "Adapter cho Avalanche",
-      "base_adapter": "Lớp nền cho tất cả adapter",
-      "trait_adapter": "Trait định nghĩa interface adapter",
-      "retry_policy": "Chính sách thử lại requests",
-      "connection_pool": "Pool kết nối RPC",
-      "interfaces": "Định nghĩa các interface chung",
-      "chain_registry": "Đăng ký và quản lý các adapter chain"
+    "*": {
+      "tab_size": 4,
+      "ruler": 100,
+      "formatOnSave": true,
+      "match_extensions": [".rs", ".toml"],
+      "ignored_folders": ["target", ".git", "logs"]
     }
   },
-  "file_management": {
-    "before_create_new_file": "Luôn kiểm tra file đã tồn tại chưa trước khi tạo mới",
-    "check_command": "Test-Path {file_path}",
-    "backup_before_edit": true,
-    "backup_extension": ".bak"
+  
+  "commands": {
+    "cargo": {
+      "*": {
+        "clippy": "cd {directory}; cargo clippy --package {package} --lib -- -D warnings",
+        "clippy_all": "cargo clippy -- -D warnings",
+        "build": "cd {directory}; cargo build",
+        "test": "cd {directory}; cargo test",
+        "run": "cd {directory}; cargo run",
+        "check": "cd {directory}; cargo check",
+        "fmt": "cd {directory}; cargo fmt",
+        "fix": "cd {directory}; cargo fix --allow-dirty"
+      }
+    }
   },
+  
+  "structure": {
+    "workspace": {
+      "*": {
+        "common": {
+          "description": "Thư viện chung và utilities",
+          "files": [
+            "src/**/*.rs",
+            "src/**/mod.rs",
+            "src/**/lib.rs",
+            "src/**/types.rs",
+            "src/**/utils.rs",
+            "src/**/error.rs",
+            "src/**/models.rs",
+            "src/**/network.rs",
+            "src/**/middleware.rs",
+            "src/**/chain_adapter.rs"
+          ],
+          "dependencies": []
+        },
+        "blockchain": {
+          "description": "Tương tác với blockchain, Quản lý EIP-2535",
+          "files": [
+            "src/**/*.rs",
+            "src/**/mod.rs",
+            "src/**/lib.rs",
+            "src/**/mining/**/*.rs",
+            "src/**/grpc/**/*.rs",
+            "src/**/farming/**/*.rs",
+            "src/**/diamond_token/**/*.rs",
+            "src/**/depin/**/*.rs",
+            "src/**/crosschain/**/*.rs",
+            "src/**/abi/**/*.rs",
+            "src/**/marketplace/**/*.rs",
+            "src/**/nft/**/*.rs"
+          ],
+          "dependencies": ["common"]
+        },
+        "wallet": {
+          "description": "Quản lý ví an toàn",
+          "files": [
+            "src/**/*.rs",
+            "src/**/mod.rs",
+            "src/**/lib.rs",
+            "src/**/secure_storage.rs",
+            "src/**/wallet.rs",
+            "src/**/farm.rs",
+            "src/**/defi.rs",
+            "src/**/config.rs"
+          ],
+          "dependencies": ["common"]
+        },
+        "snipebot": {
+          "description": "Core logic của bot",
+          "files": [
+            "src/**/*.rs",
+            "src/**/mod.rs",
+            "src/**/lib.rs",
+            "src/**/trade_logic.rs",
+            "src/**/snipebot.rs",
+            "src/**/token_status.rs",
+            "src/**/cache.rs",
+            "src/**/api.rs",
+            "src/**/types.rs",
+            "src/**/auto_tuning.rs",
+            "src/**/storage.rs",
+            "src/**/error_handling.rs",
+            "src/**/mempool.rs",
+            "src/**/gas_optimizer.rs",
+            "src/**/middleware.rs",
+            "src/**/risk_analyzer.rs",
+            "src/**/rate_limit.rs",
+            "src/**/user.rs",
+            "src/**/network.rs",
+            "src/**/wallet.rs",
+            "src/**/transaction.rs",
+            "src/**/MonteEquilibrium.rs",
+            "src/**/AIModule.rs",
+            "src/**/auto_tuning_manager.rs",
+            "src/**/retry_manager.rs",
+            "src/**/endpoint_manager.rs",
+            "src/**/connection_manager.rs",
+            "src/**/risk_analysis.rs",
+            "src/**/TradeManager.rs",
+            "src/**/flashbots.rs",
+            "src/**/blockchain.rs",
+            "src/**/contracts.rs"
+          ],
+          "dependencies": ["common", "blockchain", "wallet"]
+        },
+        "network/wasm": {
+          "description": "WebAssembly cho giao tiếp mạng",
+          "files": [
+            "src/**/*.rs",
+            "src/**/mod.rs",
+            "src/**/lib.rs",
+            "src/**/network.rs",
+            "src/**/wasm.rs"
+          ],
+          "dependencies": ["common"]
+        },
+        "diamond_manager": {
+          "description": "Quản trị hệ thống",
+          "files": [
+            "src/**/*.rs",
+            "src/**/mod.rs",
+            "src/**/lib.rs",
+            "src/**/diamond_manager.rs",
+            "src/**/contracts.rs"
+          ],
+          "dependencies": ["common", "blockchain"]
+        },
+        "frontend": {
+          "description": "Giao diện người dùng web",
+          "files": [
+            "src/**/*.rs",
+            "src/**/mod.rs",
+            "src/**/lib.rs",
+            "src/**/frontend.rs",
+            "src/**/ui.rs"
+          ],
+          "dependencies": ["network/wasm"]
+        }
+      }
+    },
+    "blockchain": {
+      "*": {
+        "chain": {
+          "description": "Quản lý blockchain",
+          "files": [
+            "src/**/chain.rs",
+            "src/**/chain/**/*.rs",
+            "src/**/chain_adapter.rs",
+            "src/**/chain_config.rs"
+          ],
+          "dependencies": ["common/chain_adapter", "common/types"]
+        },
+        "block": {
+          "description": "Xử lý block",
+          "files": [
+            "src/**/block.rs",
+            "src/**/block/**/*.rs",
+            "src/**/block_header.rs",
+            "src/**/block_body.rs"
+          ],
+          "dependencies": ["common/types", "common/models"]
+        },
+        "transaction": {
+          "description": "Xử lý giao dịch",
+          "files": [
+            "src/**/transaction.rs",
+            "src/**/transaction/**/*.rs",
+            "src/**/tx_pool.rs",
+            "src/**/tx_validator.rs"
+          ],
+          "dependencies": ["common/types", "common/models"]
+        },
+        "contract": {
+          "description": "Tương tác với hợp đồng",
+          "files": [
+            "src/**/contract.rs",
+            "src/**/contract/**/*.rs",
+            "src/**/contract_call.rs",
+            "src/**/contract_deploy.rs"
+          ],
+          "dependencies": ["common/types", "common/chain_adapter"]
+        },
+        "event": {
+          "description": "Xử lý sự kiện",
+          "files": [
+            "src/**/event.rs",
+            "src/**/event/**/*.rs",
+            "src/**/event_listener.rs",
+            "src/**/event_filter.rs"
+          ],
+          "dependencies": ["common/types", "common/models"]
+        },
+        "log": {
+          "description": "Xử lý log",
+          "files": [
+            "src/**/log.rs",
+            "src/**/log/**/*.rs",
+            "src/**/log_parser.rs",
+            "src/**/log_filter.rs"
+          ],
+          "dependencies": ["common/types", "common/models"]
+        },
+        "receipt": {
+          "description": "Xử lý biên lai",
+          "files": [
+            "src/**/receipt.rs",
+            "src/**/receipt/**/*.rs",
+            "src/**/receipt_parser.rs",
+            "src/**/receipt_validator.rs"
+          ],
+          "dependencies": ["common/types", "common/models"]
+        },
+        "gas": {
+          "description": "Quản lý gas",
+          "files": [
+            "src/**/gas.rs",
+            "src/**/gas/**/*.rs",
+            "src/**/gas_estimator.rs",
+            "src/**/gas_price.rs"
+          ],
+          "dependencies": ["common/types"]
+        },
+        "nonce": {
+          "description": "Quản lý nonce",
+          "files": [
+            "src/**/nonce.rs",
+            "src/**/nonce/**/*.rs",
+            "src/**/nonce_manager.rs",
+            "src/**/nonce_validator.rs"
+          ],
+          "dependencies": ["common/types"]
+        },
+        "balance": {
+          "description": "Quản lý số dư",
+          "files": [
+            "src/**/balance.rs",
+            "src/**/balance/**/*.rs",
+            "src/**/balance_checker.rs",
+            "src/**/balance_tracker.rs"
+          ],
+          "dependencies": ["common/types"]
+        },
+        "state": {
+          "description": "Quản lý trạng thái",
+          "files": [
+            "src/**/state.rs",
+            "src/**/state/**/*.rs",
+            "src/**/state_manager.rs",
+            "src/**/state_sync.rs"
+          ],
+          "dependencies": ["common/types"]
+        }
+      }
+    },
+    "wallet": {
+      "*": {
+        "wallet": {
+          "description": "Quản lý ví",
+          "files": [
+            "src/**/wallet.rs",
+            "src/**/wallet/**/*.rs",
+            "src/**/wallet_manager.rs",
+            "src/**/wallet_utils.rs"
+          ],
+          "dependencies": ["common/security", "common/types"]
+        },
+        "key": {
+          "description": "Quản lý khóa",
+          "files": [
+            "src/**/key.rs",
+            "src/**/key/**/*.rs",
+            "src/**/key_manager.rs",
+            "src/**/key_generator.rs"
+          ],
+          "dependencies": ["common/security", "common/types"]
+        },
+        "account": {
+          "description": "Quản lý tài khoản",
+          "files": [
+            "src/**/account.rs",
+            "src/**/account/**/*.rs",
+            "src/**/account_manager.rs",
+            "src/**/account_validator.rs"
+          ],
+          "dependencies": ["common/types", "common/models"]
+        },
+        "address": {
+          "description": "Quản lý địa chỉ",
+          "files": [
+            "src/**/address.rs",
+            "src/**/address/**/*.rs",
+            "src/**/address_validator.rs",
+            "src/**/address_generator.rs"
+          ],
+          "dependencies": ["common/types"]
+        },
+        "balance": {
+          "description": "Quản lý số dư",
+          "files": [
+            "src/**/balance.rs",
+            "src/**/balance/**/*.rs",
+            "src/**/balance_checker.rs",
+            "src/**/balance_tracker.rs"
+          ],
+          "dependencies": ["common/types"]
+        },
+        "transaction": {
+          "description": "Quản lý giao dịch",
+          "files": [
+            "src/**/transaction.rs",
+            "src/**/transaction/**/*.rs",
+            "src/**/tx_signer.rs",
+            "src/**/tx_validator.rs"
+          ],
+          "dependencies": ["common/types", "common/models"]
+        },
+        "signature": {
+          "description": "Xử lý chữ ký",
+          "files": [
+            "src/**/signature.rs",
+            "src/**/signature/**/*.rs",
+            "src/**/signature_verifier.rs",
+            "src/**/signature_generator.rs"
+          ],
+          "dependencies": ["common/security", "common/types"]
+        },
+        "keystore": {
+          "description": "Quản lý keystore",
+          "files": [
+            "src/**/keystore.rs",
+            "src/**/keystore/**/*.rs",
+            "src/**/keystore_manager.rs",
+            "src/**/keystore_encryption.rs"
+          ],
+          "dependencies": ["common/security", "common/types"]
+        },
+        "mnemonic": {
+          "description": "Xử lý mnemonic",
+          "files": [
+            "src/**/mnemonic.rs",
+            "src/**/mnemonic/**/*.rs",
+            "src/**/mnemonic_generator.rs",
+            "src/**/mnemonic_validator.rs"
+          ],
+          "dependencies": ["common/security", "common/types"]
+        },
+        "private_key": {
+          "description": "Quản lý private key",
+          "files": [
+            "src/**/private_key.rs",
+            "src/**/private_key/**/*.rs",
+            "src/**/private_key_manager.rs",
+            "src/**/private_key_encryption.rs"
+          ],
+          "dependencies": ["common/security", "common/types"]
+        },
+        "public_key": {
+          "description": "Quản lý public key",
+          "files": [
+            "src/**/public_key.rs",
+            "src/**/public_key/**/*.rs",
+            "src/**/public_key_manager.rs",
+            "src/**/public_key_validator.rs"
+          ],
+          "dependencies": ["common/security", "common/types"]
+        },
+        "seed": {
+          "description": "Quản lý seed",
+          "files": [
+            "src/**/seed.rs",
+            "src/**/seed/**/*.rs",
+            "src/**/seed_generator.rs",
+            "src/**/seed_validator.rs"
+          ],
+          "dependencies": ["common/security", "common/types"]
+        },
+        "password": {
+          "description": "Xử lý mật khẩu",
+          "files": [
+            "src/**/password.rs",
+            "src/**/password/**/*.rs",
+            "src/**/password_manager.rs",
+            "src/**/password_validator.rs"
+          ],
+          "dependencies": ["common/security"]
+        },
+        "encryption": {
+          "description": "Mã hóa dữ liệu",
+          "files": [
+            "src/**/encryption.rs",
+            "src/**/encryption/**/*.rs",
+            "src/**/encryption_manager.rs",
+            "src/**/encryption_utils.rs"
+          ],
+          "dependencies": ["common/security"]
+        },
+        "decryption": {
+          "description": "Giải mã dữ liệu",
+          "files": [
+            "src/**/decryption.rs",
+            "src/**/decryption/**/*.rs",
+            "src/**/decryption_manager.rs",
+            "src/**/decryption_utils.rs"
+          ],
+          "dependencies": ["common/security"]
+        },
+        "backup": {
+          "description": "Sao lưu dữ liệu",
+          "files": [
+            "src/**/backup.rs",
+            "src/**/backup/**/*.rs",
+            "src/**/backup_manager.rs",
+            "src/**/backup_validator.rs"
+          ],
+          "dependencies": ["common/security"]
+        },
+        "restore": {
+          "description": "Khôi phục dữ liệu",
+          "files": [
+            "src/**/restore.rs",
+            "src/**/restore/**/*.rs",
+            "src/**/restore_manager.rs",
+            "src/**/restore_validator.rs"
+          ],
+          "dependencies": ["common/security"]
+        },
+        "import": {
+          "description": "Nhập dữ liệu",
+          "files": [
+            "src/**/import.rs",
+            "src/**/import/**/*.rs",
+            "src/**/import_manager.rs",
+            "src/**/import_validator.rs"
+          ],
+          "dependencies": ["common/security"]
+        },
+        "export": {
+          "description": "Xuất dữ liệu",
+          "files": [
+            "src/**/export.rs",
+            "src/**/export/**/*.rs",
+            "src/**/export_manager.rs",
+            "src/**/export_validator.rs"
+          ],
+          "dependencies": ["common/security"]
+        },
+        "verify": {
+          "description": "Xác thực dữ liệu",
+          "files": [
+            "src/**/verify.rs",
+            "src/**/verify/**/*.rs",
+            "src/**/verify_manager.rs",
+            "src/**/verify_validator.rs"
+          ],
+          "dependencies": ["common/security"]
+        }
+      }
+    }
+  },
+  
+  "development_workflow": {
+    "*": {
+      "code_review": {
+        "checklist": [
+          "Kiểm tra quy tắc đặt tên",
+          "Kiểm tra thread safety",
+          "Kiểm tra error handling",
+          "Kiểm tra async patterns",
+          "Kiểm tra documentation"
+        ]
+      },
+      "testing": {
+        "unit_tests": "Viết unit test cho các hàm quan trọng",
+        "integration_tests": "Viết integration test cho các module",
+        "benchmarks": "Thêm benchmarks cho các hàm performance-critical"
+      },
+      "documentation": {
+        "code_comments": "Thêm doc comments cho các struct và trait",
+        "api_docs": "Cập nhật API documentation",
+        "examples": "Thêm ví dụ sử dụng"
+      },
+      "security_review": {
+        "checklist": [
+          "Kiểm tra mã hóa và bảo mật dữ liệu",
+          "Kiểm tra xử lý dữ liệu nhạy cảm",
+          "Kiểm tra cơ chế xác thực",
+          "Kiểm tra quản lý khóa và mật khẩu"
+        ]
+      },
+      "performance_review": {
+        "checklist": [
+          "Kiểm tra cơ chế caching",
+          "Kiểm tra xử lý lỗi và retry",
+          "Kiểm tra thread safety",
+          "Kiểm tra deadlock prevention"
+        ]
+      },
+      "mev_protection": {
+        "checklist": [
+          "Kiểm tra phát hiện sandwich attack",
+          "Kiểm tra phát hiện frontrunning",
+          "Kiểm tra phát hiện arbitrage",
+          "Kiểm tra cơ chế bảo vệ"
+        ]
+      }
+    }
+  },
+  
   "common_errors": {
-    "mutable_borrow": "Lỗi mượn đồng thời &mut self và &self trong Rust",
-    "mutable_borrow_solutions": {
-      "RULE_NUMBER_ONE": "CLONE DỮ LIỆU - Luôn clone dữ liệu cần truy cập trước khi mượn mutable",
-      "create_scopes": "Tạo scope mới với dấu ngoặc nhọn {} để giới hạn phạm vi của mutable borrow",
-      "separate_methods": "Tách thành các phương thức riêng biệt để tránh mượn đồng thời",
-      "clone_before_use": "Clone dữ liệu TRƯỚC khi sử dụng để tạo bản sao độc lập - ĐÂY LÀ GIẢI PHÁP HÀNG ĐẦU",
-      "drop_explicitly": "Sử dụng std::mem::drop() để giải phóng borrow trước khi tạo borrow mới",
-      "ref_patterns": "Sử dụng ref và ref mut patterns trong match và if let",
-      "temporary_variables": "Trích xuất dữ liệu cần thiết vào biến tạm trước khi mượn mutable",
-      "divide_complex_functions": "Chia nhỏ hàm phức tạp thành nhiều hàm nhỏ hơn",
-      "avoid_nested_borrows": "Tránh mượn lồng nhau (&mut self.field.other_field)"
-    },
-    "lifetime": "Vấn đề lifetime của các tham chiếu",
-    "compile_error": "Lỗi biên dịch thường gặp",
-    "clippy_warning": "Cảnh báo từ cargo clippy",
-    "thread_safety": {
-      "missing_trait_bounds": "Thiếu ràng buộc Send + Sync cho trait objects trong async context",
-      "closure_bounds": "Closure không implement Send hoặc Sync để gửi giữa các thread",
-      "fn_pointer_vs_closure": "Lỗi khi sử dụng closure thay cho fn pointer (không tương thích)",
-      "async_trait": "Vấn đề khi trait có phương thức async (không thể làm object)",
-      "async_borrowing": "Vấn đề khi mượn biến trong closure async (.await có thể gây ra lỗi)",
-      "clone_within_closure": "Lỗi khi clone biến bên trong closure (thay vì bên ngoài)",
-      "trait_object_thread_safety": "Lỗi khi trait object không thực hiện Send + Sync cho multithreading",
-      "solutions": {
-        "add_trait_bounds": "Thêm Send + Sync + 'static cho trait objects",
-        "use_arc": "Sử dụng Arc<T> để chia sẻ dữ liệu giữa các task",
-        "clone_before_async": "Clone dữ liệu trước khi đưa vào async block",
-        "use_standalone_functions": "Sử dụng hàm độc lập thay vì closure",
-        "proper_mutex_usage": "Sử dụng Mutex/RwLock đúng cách trong async context"
-      }
-    },
-    "missing_field_initialization": "Thiếu khởi tạo trường trong struct",
-    "duplicate_method_implementation": "Trùng lặp định nghĩa phương thức trong cùng impl block",
-    "wrong_method_signature": "Tên phương thức không khớp hoặc không tồn tại",
-    "type_mismatch": "Kiểu dữ liệu không khớp (Option<T> vs T, Result<T> vs T)",
-    "ethers_api_misuse": "Sử dụng sai API của ethers",
-    "missing_trait_bounds": "Thiếu ràng buộc trait (Send/Sync) cho các tham số generic/trait object",
-    "unused_variables": "Biến không được sử dụng",
-    "inconsistent_naming": "Không thống nhất đặt tên (ví dụ: ChainConfig)",
-    "duplicate_struct_definition": "Trùng lặp định nghĩa struct trong cùng một file hoặc module",
-    "multiple_applicable_items": "Nhiều hàm/phương thức có cùng tên áp dụng trong cùng scope",
-    "comparison_with_instant": "So sánh Instant không đúng với các kiểu dữ liệu khác",
-    "cache_entry_inconsistency": "Sử dụng không nhất quán kiểu dữ liệu cache entry",
-    "provider_contract_wraparound": "Thiếu Arc wrap cho provider khi tạo Contract",
-    "transaction_api_misuse": "Sử dụng không đúng các phương thức của TransactionRequest",
-    "lifetime_issues": "Lỗi về lifetime thường xảy ra khi tham chiếu không sống đủ lâu",
-    "borrow_checker": "Lỗi mutable borrow khi đã có một immutable borrow và ngược lại",
-    "borrow_checker_solutions": {
-      "scope_isolation": "Tạo scope riêng biệt với {} để giới hạn thời gian sống của các borrow",
-      "temp_variable": "Lưu kết quả phương thức vào biến tạm thay vì gọi trực tiếp",
-      "data_cloning": "Clone dữ liệu để tạo bản sao độc lập, đặc biệt trong MonteEquilibrium.rs",
-      "restructure_code": "Cấu trúc lại code để tránh các borrow chồng chéo nhau", 
-      "use_blocks": "Sử dụng khối mã nhỏ hơn để giới hạn phạm vi của borrow",
-      "impl_instead_of_closure": "Sử dụng impl fn thay vì closure để tránh capture mutable và immutable ref cùng lúc"
-    },
-    "async_missing_send": "Thiếu Send trait cho Future trong async fn",
-    "generic_lifetime_elision": "Bỏ qua lifetime trong generic parameters",
-    "ref_vs_clone": "Sử dụng tham chiếu thay vì clone khi có thể",
-    "missing_unwrap_handling": "Không xử lý lỗi khi gọi unwrap() hoặc expect()",
-    "api_response_mismatch": "Sử dụng trường không tồn tại trong struct ApiResponse",
-    "token_info_api_errors": "Truy cập không đúng phương thức hoặc trường trong kết quả API token",
-    "retry_errors": {
-      "max_retries_exceeded": "Vượt quá số lần retry tối đa",
-      "max_retry_time_exceeded": "Vượt quá thời gian retry tối đa",
-      "circuit_breaker_open": "Circuit breaker đang mở cho endpoint",
-      "non_retryable_error": "Gặp lỗi không thể retry",
-      "gas_adjustment_failure": "Không thể điều chỉnh gas price",
-      "solutions": {
-        "check_retry_config": "Kiểm tra cấu hình retry (max_retries, max_time)",
-        "monitor_circuit_breaker": "Theo dõi trạng thái circuit breaker",
-        "adjust_gas_strategy": "Điều chỉnh chiến lược gas price",
-        "use_fallback_providers": "Sử dụng provider dự phòng",
-        "improve_error_handling": "Cải thiện xử lý lỗi cụ thể"
-      }
-    }
-  },
-  "async_best_practices": {
-    "extract_before_borrowing": "Trích xuất dữ liệu cần thiết trước khi mượn &mut",
-    "use_arc_for_sharing": "Sử dụng Arc<T> để chia sẻ dữ liệu giữa các task",
-    "avoid_nested_borrows": "Tránh mượn lồng nhau trong các hàm async",
-    "function_instead_of_closure": "Sử dụng hàm riêng biệt thay vì closure khi cần fn pointer",
-    "clone_input_for_future": "Clone dữ liệu đầu vào trước khi đưa vào Future",
-    "explicit_send_sync": "Chỉ định rõ Send + Sync cho các hàm callback được truyền qua thread",
-    "prefer_impl_traits": "Sử dụng `impl trait` thay vì Box<dyn Future> khi có thể",
-    "add_send_sync_to_trait_objects": "Thêm + Send + Sync + 'static cho tất cả trait objects dùng trong multithreaded context",
-    "async_fn_to_trait_object": "Sử dụng async_trait macro cho trait có phương thức async",
-    "proper_error_handling": "Xử lý lỗi đúng với anyhow::Result và transmute errors khi cần",
-    "borrow_checker_strategies": {
-      "clone_before_async_block": "Clone dữ liệu trước khi sử dụng trong async block để tránh lỗi lifetime",
-      "separate_borrow_spans": "Đảm bảo các mutable và immutable borrows không chồng chéo phạm vi",
-      "scope_limiting": "Sử dụng {} để giới hạn phạm vi của mutable borrow",
-      "early_returns": "Sử dụng early returns để giảm phạm vi của borrow",
-      "split_method_calls": "Tách các lệnh gọi phương thức cần các borrow khác nhau",
-      "move_clone_outside": "Thực hiện clone bên ngoài closure thay vì bên trong",
-      "avoid_self_references": "Tránh tạo tham chiếu tới self trong cùng một phương thức async"
-    },
-    "monte_equilibrium_patterns": {
-      "player_data_handling": "Clone PlayerModel trước khi phân tích trong analyze_players",
-      "strategy_calculation": "Tạo scope riêng biệt cho tính toán strategy trong estimate_gas_strategy",
-      "simulation_results": "Lưu kết quả trung gian vào biến tạm trước khi lưu vào self",
-      "mempool_analysis": "Tạo bản sao của mempool_state khi cần đồng thời đọc và cập nhật"
-    }
-  },
-  "ethers_patterns": {
-    "contract_initialization": "Sử dụng Arc<Provider<Http>> cho Contract constructor",
-    "transaction_handling": "TypedTransaction vs TransactionRequest (chuyển đổi đúng)",
-    "gas_estimation": "Xử lý đúng gas_price, max_fee_per_gas và max_priority_fee_per_gas cho EIP-1559",
-    "provider_middleware": "Sử dụng đúng các phương thức của middleware",
-    "contract_calls": "Xử lý đúng các gọi hàm contract với FunctionCall",
-    "watching_transactions": "Sử dụng pending_transaction vs wait_for_transaction_receipt",
-    "error_propagation": "Xử lý lỗi ethers đúng cách"
-  },
-  "trait_object_guidelines": {
-    "always_add_send_sync": "Thêm Send + Sync cho trait objects sử dụng trong thread pool/async context",
-    "explicit_dyn_keyword": "Sử dụng từ khóa dyn để làm rõ trait object",
-    "use_box_dyn_for_async": "Sử dụng Box<dyn Trait> cho các trait object có phương thức async",
-    "consistent_trait_bounds": "Đảm bảo ràng buộc trait nhất quán trên tất cả các trait",
-    "async_trait_macro": "Sử dụng #[async_trait] cho các trait có phương thức async",
-    "object_safety": "Đảm bảo trait là object safe (không có generic type parameters, không có Sized bound)",
-    "trait_implementation": "Triển khai đầy đủ tất cả các phương thức bắt buộc",
-    "explicit_bounds": "Chỉ rõ bounds như Send + Sync + 'static khi khai báo trait dùng trong context đa luồng"
-  },
-  "version_control": {
-    "commit_message_format": "chore/feat/fix/docs/refactor/test/style: mô tả ngắn",
-    "branch_naming": "feature/bugfix/hotfix/release/refactor-tên-thay-đổi",
-    "commit_frequency": "Thường xuyên commit, push ít nhất mỗi ngày"
-  },
-  "library_versions": {
-    "ethers": "2.0",
-    "tokio": "1.28",
-    "serde": "1.0",
-    "anyhow": "1.0",
-    "tracing": "0.1",
-    "async_trait": "0.1.68"
-  },
-  "snipebot_structure": {
-    "architecture": "Cấu trúc module hóa với 4 layer: Core, Blockchain, Trading, và AI/Analysis",
-    "core_modules": [
-      "snipebot.rs - Module chính quản lý luồng và điều phối các module khác",
-      "config.rs - Quản lý cấu hình tổng thể hệ thống",
-      "api.rs - Cung cấp RESTful API endpoints cho client",
-      "service.rs - Quản lý vòng đời của các service"
-    ],
-    "blockchain_modules": [
-      "chain_adapters/ - Trừu tượng hóa tương tác với các blockchain khác nhau",
-      "blockchain.rs - Tương tác trực tiếp với blockchain",
-      "flashbots.rs - Tương tác với Flashbots để chống front-running",
-      "nonce_manager.rs - Quản lý transaction nonces"
-    ],
-    "trading_modules": [
-      "trade_logic.rs - Logic giao dịch chính",
-      "gas_optimizer.rs - Tối ưu hóa giá gas cho giao dịch",
-      "mempool.rs - Theo dõi mempool để phát hiện giao dịch",
-      "TradeManager.rs - Quản lý các giao dịch đang thực thi",
-      "MonteEquilibrium.rs - Tối ưu hóa chiến lược giao dịch theo lý thuyết trò chơi"
-    ],
-    "ai_analysis_modules": [
-      "AIModule.rs - Phân tích dữ liệu và đưa ra dự đoán",
-      "risk_analyzer.rs - Phân tích rủi ro token",
-      "token_status.rs - Theo dõi trạng thái token",
-      "analysis/ - Phân tích chi tiết token và giao dịch"
-    ],
-    "utility_modules": [
-      "utils.rs - Các hàm tiện ích",
-      "error_handling.rs - Xử lý lỗi tập trung",
-      "middleware.rs - Các middleware cho API",
-      "retry_policy.rs - Chính sách thử lại cho RPC calls",
-      "storage.rs - Lưu trữ dữ liệu",
-      "auto_tuning.rs - Tự động điều chỉnh tham số"
-    ]
-  },
-  "module_responsibilities": {
-    "snipebot.rs": {
-      "description": "Module chính chứa class SnipeBot",
-      "responsibilities": [
-        "Điều phối các hoạt động giao dịch (snipe, swap, approve)",
-        "Quản lý các module con và tích hợp giữa chúng",
-        "Cung cấp các phương thức để tương tác với blockchain",
-        "Khởi tạo và quản lý vòng đời các thành phần"
-      ],
-      "key_methods": [
-        "snipe() - Thực hiện giao dịch snipe token",
-        "get_token_status() - Lấy thông tin trạng thái token",
-        "analyze_token() - Phân tích token và rủi ro",
-        "get_mempool_status() - Lấy trạng thái mempool"
-      ]
-    },
-    "api.rs": {
-      "description": "Cung cấp RESTful API endpoints cho client",
-      "responsibilities": [
-        "Xử lý các request từ người dùng",
-        "Chuyển đổi dữ liệu giữa JSON và cấu trúc nội bộ",
-        "Xác thực và cấp quyền người dùng",
-        "Phản hồi với mã trạng thái HTTP phù hợp"
-      ],
-      "key_methods": [
-        "execute_snipe() - API endpoint để snipe token",
-        "token_stats() - Lấy thông tin và phân tích token",
-        "monitor_tokens() - Theo dõi danh sách token",
-        "switch_bot_mode() - Chuyển đổi chế độ bot"
-      ]
-    },
-    "chain_adapters": {
-      "description": "Tạo lớp trừu tượng hóa cho tương tác với blockchain",
-      "responsibilities": [
-        "Định nghĩa interface chung cho tất cả blockchain",
-        "Triển khai adapter cho từng blockchain cụ thể",
-        "Quản lý kết nối RPC và retry logic",
-        "Chuyển đổi giữa các định dạng dữ liệu blockchain"
-      ],
-      "key_components": [
-        "trait_adapter.rs - Định nghĩa trait ChainAdapter",
-        "base.rs - Triển khai cơ sở cho các adapter",
-        "chain_registry.rs - Quản lý và đăng ký các adapter",
-        "ethereum.rs/bsc.rs/avalanche.rs - Adapter cho từng blockchain"
-      ]
-    },
-    "AIModule.rs": {
-      "description": "Module phân tích và dự đoán dựa trên AI",
-      "responsibilities": [
-        "Sử dụng model AI để phân tích dữ liệu",
-        "Dự đoán giá và xu hướng token",
-        "Đưa ra quyết định giao dịch",
-        "Đánh giá mức độ tin cậy của dự đoán"
-      ],
-      "key_methods": [
-        "analyze_token() - Phân tích token với AI",
-        "predict_price_movement() - Dự đoán chuyển động giá",
-        "evaluate_opportunity() - Đánh giá cơ hội giao dịch",
-        "get_ai_confidence() - Mức độ tin cậy của dự đoán"
-      ]
-    },
-    "MonteEquilibrium.rs": {
-      "description": "Tối ưu hóa chiến lược giao dịch dựa trên lý thuyết trò chơi",
-      "responsibilities": [
-        "Tính toán điểm cân bằng Nash cho gas và timing",
-        "Mô phỏng các chiến lược MEV",
-        "Tối ưu hóa thời điểm và giá gas",
-        "Phân tích trạng thái mempool để tìm cơ hội"
-      ],
-      "key_methods": [
-        "optimize_strategy() - Tối ưu hóa chiến lược",
-        "simulate_nash_equilibrium() - Tính điểm cân bằng Nash",
-        "calculate_optimal_gas() - Tính gas tối ưu",
-        "evaluate_mempool_state() - Đánh giá trạng thái mempool"
-      ]
-    },
-    "mempool.rs": {
-      "description": "Theo dõi mempool để phát hiện giao dịch token",
-      "responsibilities": [
-        "Giám sát giao dịch đang chờ xử lý",
-        "Phát hiện các giao dịch swap",
-        "Phân tích các cơ hội sandwich",
-        "Cung cấp dữ liệu cho các module khác"
-      ],
-      "key_methods": [
-        "start_watching() - Bắt đầu theo dõi mempool",
-        "analyze_transaction() - Phân tích giao dịch trong mempool",
-        "detect_swap_transactions() - Phát hiện giao dịch swap",
-        "find_sandwich_opportunities() - Tìm cơ hội sandwich"
-      ]
-    },
-    "TradeManager.rs": {
-      "description": "Quản lý các giao dịch đang thực thi",
-      "responsibilities": [
-        "Điều phối các giao dịch đang chạy",
-        "Theo dõi trạng thái giao dịch",
-        "Xử lý thành công/thất bại của giao dịch",
-        "Thực hiện các hành động dựa trên chiến lược"
-      ],
-      "key_methods": [
-        "execute_trade() - Thực hiện giao dịch",
-        "monitor_trade() - Theo dõi trạng thái giao dịch",
-        "handle_trade_completion() - Xử lý hoàn thành giao dịch",
-        "cancel_trade() - Hủy giao dịch đang chờ"
-      ]
-    },
-    "risk_analyzer.rs": {
-      "description": "Phân tích rủi ro của token",
-      "responsibilities": [
-        "Phát hiện honeypot, rugpull, và các vấn đề bảo mật",
-        "Đánh giá mức độ rủi ro của token",
-        "Cảnh báo về các hàm nguy hiểm trong contract",
-        "Tính điểm rủi ro tổng thể"
-      ],
-      "key_methods": [
-        "analyze_token() - Phân tích rủi ro token",
-        "check_honeypot() - Kiểm tra honeypot",
-        "evaluate_contract_security() - Đánh giá bảo mật contract",
-        "calculate_risk_score() - Tính điểm rủi ro"
-      ]
-    }
-  },
-  "external_connections": {
-    "diamond_wallet": {
-      "description": "Quản lý ví và khóa bảo mật",
-      "usage_points": [
-        "SnipeBot sử dụng WalletManager để quản lý ví",
-        "Import ví từ private key hoặc mnemonic",
-        "Tạo ví mới và mã hóa thông tin nhạy cảm"
-      ],
-      "key_methods_used": [
-        "import_from_private_key()",
-        "import_from_mnemonic()",
-        "create_new_wallet()"
-      ]
-    },
-    "diamond_common": {
-      "description": "Tiện ích và cấu trúc dữ liệu chung",
-      "usage_points": [
-        "API sử dụng middleware cho xác thực",
-        "Các utilities chung cho xử lý lỗi và logging"
-      ],
-      "key_components_used": [
-        "middleware module",
-        "authentication và authorization"
-      ]
-    },
-    "diamond_blockchain": {
-      "description": "Tương tác với blockchain",
-      "usage_points": [
-        "Import các ABI và định nghĩa interface",
-        "Sử dụng gián tiếp qua các adapter"
-      ]
-    },
-    "network_wasm": {
-      "description": "WebAssembly cho giao tiếp và phân tích",
-      "usage_points": [
-        "Module analysis/wasm_engine.rs khởi tạo và sử dụng WASM",
-        "Phân tích an toàn code token và các giao dịch"
-      ],
-      "key_methods_used": [
-        "init_wasm_engine()",
-        "analyze_transaction()"
-      ]
-    }
-  },
-  "development_workflows": {
-    "feature_implementation": {
-      "steps": [
-        "1. Xác định module chịu trách nhiệm cho feature",
-        "2. Kiểm tra các kết nối và phụ thuộc của module",
-        "3. Theo dõi các pattern và conventions trong .cursorrc",
-        "4. Thực hiện các thay đổi với quy ước đặt tên và trait bounds phù hợp",
-        "5. Kiểm tra lỗi với cargo_clippy trước khi commit"
-      ]
-    },
-    "bug_fixing": {
-      "steps": [
-        "1. Xác định module có lỗi",
-        "2. Tìm trong common_errors để kiểm tra lỗi tương tự",
-        "3. Áp dụng các best practice liên quan",
-        "4. Kiểm tra kết nối với các module khác",
-        "5. Sử dụng cargo_fix nếu cần"
-      ]
-    },
-    "thread_safety_check": {
-      "steps": [
-        "1. Kiểm tra trait bounds Send + Sync cho trait objects",
-        "2. Kiểm tra Arc và Mutex/RwLock sử dụng đúng",
-        "3. Áp dụng async_best_practices",
-        "4. Sử dụng trait_object_guidelines"
-      ]
-    },
-    "ethers_integration": {
-      "steps": [
-        "1. Đảm bảo sử dụng đúng các API của ethers",
-        "2. Kiểm tra các pattern trong ethers_patterns",
-        "3. Xác minh error handling phù hợp cho các API"
-      ]
-    }
-  },
-  "cache_patterns": {
-    "cache_entry_standardization": "Sử dụng struct CacheEntry thay vì tuple để lưu trữ dữ liệu cache",
-    "ttl_management": "Quản lý TTL (Time To Live) cho cache entry bằng Instant",
-    "json_serialization": "Sử dụng serde_json::Value cho lưu trữ dữ liệu trong cache",
-    "cache_cleanup": "Triển khai phương thức cleanup_cache để xóa các entry hết hạn",
-    "rwlock_try_write": "Sử dụng RwLock::try_write khi có thể để tránh deadlock",
-    "cache_access_patterns": "Kiểm tra cache trước khi gọi API và lưu kết quả API vào cache"
-  },
-  "bug_fixes": {
-    "adapter_cache_standardization": {
-      "lỗi": "Không nhất quán trong định nghĩa cache giữa các adapter",
-      "giải_pháp": "Sử dụng RwLock<HashMap<String, CacheEntry>> cho tất cả adapter",
-      "ví_dụ": "pub cache: RwLock<HashMap<String, CacheEntry>>"
-    },
-    "cache_entry_type": {
-      "lỗi": "Sử dụng kiểu dữ liệu khác nhau cho CacheEntry",
-      "giải_pháp": "Định nghĩa struct CacheEntry với các trường chuẩn",
-      "ví_dụ": "pub struct CacheEntry { pub data: Value, pub timestamp: Instant }"
-    },
-    "api_response_handling": {
-      "lỗi": "Truy cập trường không tồn tại trong ApiResponse",
-      "giải_pháp": "Kiểm tra cấu trúc ApiResponse và sử dụng match hoặc if let",
-      "ví_dụ": "if let Some(status) = response.status { ... }"
-    },
-    "duplicate_definition": {
-      "lỗi": "Định nghĩa trùng lặp của struct hoặc enum",
-      "giải_pháp": "Tạo một module chung để chia sẻ định nghĩa hoặc sử dụng re-export",
-      "ví_dụ": "pub use crate::chain_adapters::common::EVMAdapter;"
-    },
-    "borrow_checker_violations": {
-      "lỗi": "Lỗi mutable và immutable borrow cùng lúc",
-      "giải_pháp": "Sử dụng scope riêng biệt hoặc clone dữ liệu khi cần thiết",
-      "ví_dụ": "let data_clone = data.clone(); // Sử dụng data_clone khi cần mutable borrow data"
-    },
-    "token_info_method_usage": {
-      "lỗi": "Sử dụng phương thức không tồn tại như get_token_info",
-      "giải_pháp": "Kiểm tra API và sử dụng phương thức đúng",
-      "ví_dụ": "bot.get_token_details(token_address) thay vì bot.get_token_info(token_address)"
-    }
-  },
-  "rust_code_guidelines": {
-    "mutable_references": {
-      "primary_rule": "LUÔN CLONE DỮ LIỆU TRƯỚC KHI SỬ DỤNG trong các hàm có mượn đồng thời mutable và immutable",
-      "pattern_matching": "Khi làm việc với đối tượng phức tạp, trích xuất giá trị vào biến cục bộ trước khi mượn mutable",
-      "struct_data_access": "Không bao giờ được giữ tham chiếu đến trường của struct sau khi mượn &mut self",
-      "method_chaining": "Tránh method chaining khi các phương thức mượn &mut self. Lưu kết quả trung gian vào biến"
-    },
-    "async_await_patterns": {
-      "clone_for_async": "LUÔN CLONE dữ liệu trước khi đưa vào async block hoặc Future",
-      "avoid_self_capture": "Tránh capture cả &self và &mut self trong cùng một async block",
-      "arc_mutex_pattern": "Sử dụng Arc<Mutex<T>> thay vì &mut T khi cần truy cập mutable từ nhiều async task",
-      "separate_data_access": "Trích xuất dữ liệu cần thiết ra khỏi struct trước khi gọi .await",
-      "scope_limitation": "Sử dụng khối {} để giới hạn phạm vi của mutable borrow trước khi gọi .await"
-    },
-    "thread_safety": {
-      "arc_instead_of_ref": "Sử dụng Arc<T> thay vì &T khi truyền dữ liệu giữa các task",
-      "mutex_rwlock_use": "Sử dụng Mutex cho write frequent, RwLock cho read frequent",
-      "trait_bounds": "Luôn thêm + Send + Sync + 'static cho trait objects trong async context",
-      "prefer_tokio_types": "Ưu tiên sử dụng tokio::sync::Mutex thay vì std::sync::Mutex trong async code",
-      "clone_data_not_locks": "Clone dữ liệu bên trong lock, không clone lock (tránh clone Arc<Mutex<T>>)"
-    },
-    "struct_design": {
-      "mandatory_derive": "#[derive(Clone, Debug)] cho tất cả các struct",
-      "default_implementation": "Cung cấp impl Default khi có thể",
-      "single_source_of_truth": "Chỉ định nghĩa struct một lần, sử dụng type alias nếu cần các phiên bản",
-      "constructor_validation": "Kiểm tra tính hợp lệ của tham số trong hàm new()",
-      "builder_pattern": "Sử dụng builder pattern cho struct có nhiều tham số tùy chọn"
-    },
-    "error_handling": {
-      "anyhow_for_libs": "Sử dụng anyhow::Result<T> cho các hàm thư viện",
-      "thiserror_for_apis": "Sử dụng thiserror để định nghĩa enum lỗi cho API public",
-      "context_for_errors": "Luôn thêm context cho lỗi với .context() hoặc with_context()",
-      "proper_error_propagation": "Ưu tiên sử dụng ? operator thay vì match/unwrap()",
-      "graceful_degradation": "Xử lý lỗi một cách nhẹ nhàng, tránh panic trong code production"
-    }
-  },
-  "async_await_guidelines": {
-    "before_await": [
-      "Clone các giá trị cần sử dụng sau .await trước khi gọi .await",
-      "Giải phóng mutable borrows trước khi gọi .await",
-      "Trả về sớm nếu có lỗi trước .await để tránh logic lồng nhau"
-    ],
-    "after_await": [
-      "Không tham chiếu đến giá trị đã mượn trước .await",
-      "Tránh sử dụng &mut self sau khi gọi một phương thức .await bên trong một phương thức &mut self khác",
-      "Kiểm tra lại trạng thái sau .await vì có thể đã thay đổi"
-    ],
-    "closure_captures": [
-      "Luôn sử dụng move thay vì borrow trong async move || {} blocks",
-      "Clone dữ liệu trước khi capture vào closures bất cứ khi nào có thể",
-      "Không capture &self và &mut self cùng lúc trong async blocks"
-    ],
-    "sharing_state": [
-      "Sử dụng Arc<Mutex<T>> hoặc Arc<RwLock<T>> cho shared mutable state",
-      "Ưu tiên tokio::sync::Mutex thay vì std::sync::Mutex",
-      "Giữ lock trong thời gian ngắn nhất có thể, tránh gọi .await khi đang giữ lock"
-    ]
-  },
-  "derive_macros_guidelines": {
-    "always_include": [
-      "#[derive(Debug)] cho tất cả các struct và enum",
-      "#[derive(Clone)] cho tất cả các struct và enum cần sao chép",
-      "#[derive(PartialEq, Eq)] cho các struct dùng để so sánh",
-      "#[derive(Default)] cho các struct có default values"
-    ],
-    "serialize_deserialize": [
-      "#[derive(Serialize, Deserialize)] cho các struct dùng trong API",
-      "Sử dụng #[serde(rename_all = \"camelCase\")] cho API JSON",
-      "Sử dụng #[serde(skip)] cho các trường không cần serialize"
-    ],
-    "custom_derives": [
-      "Tạo custom derive macros cho các struct phức tạp",
-      "Sử dụng procedural macros để giảm boilerplate code"
-    ]
-  },
-  "project_structure": {
-    "workspace": {
-      "common": "Thư viện chung và utilities",
-      "blockchain": "Tương tác với blockchain, Quản lý EIP-2535",
-      "wallet": "Quản lý ví an toàn",
-      "snipebot": "Core logic của bot",
-      "network/wasm": "WebAssembly cho giao tiếp mạng",
-      "diamond_manager": "Quản trị hệ thống",
-      "frontend": "Giao diện người dùng web"
-    },
-    "snipebot": {
-      "chain_adapters": "Adapter cho các blockchain",
-      "api": "RESTful API endpoints",
-      "trade_logic": "Logic giao dịch chính",
-      "gas_optimizer": "Tối ưu hóa gas",
-      "mempool": "Theo dõi mempool",
-      "flashbots": "Tương tác với Flashbots",
-      "retry_policy": "Xử lý thử lại RPC calls",
-      "connection_pool": "Quản lý pool kết nối RPC",
-      "token_status": "Quản lý trạng thái token",
-      "rate_limit": "Giới hạn tỷ lệ request",
-      "auto_tuning": "Tự động điều chỉnh tham số",
-      "risk_analyzer": "Phân tích rủi ro token",
-      "MonteEquilibrium": "Tối ưu hóa chiến lược giao dịch"
-    },
-    "chain_adapters": {
-      "base": "Các lớp adapter cơ bản",
-      "ethereum": "Adapter cho Ethereum",
-      "bsc": "Adapter cho Binance Smart Chain",
-      "avalanche": "Adapter cho Avalanche",
-      "base_adapter": "Lớp nền cho tất cả adapter",
-      "trait_adapter": "Trait định nghĩa interface adapter",
-      "retry_policy": "Chính sách thử lại requests",
-      "connection_pool": "Pool kết nối RPC",
-      "interfaces": "Định nghĩa các interface chung",
-      "chain_registry": "Đăng ký và quản lý các adapter chain"
-    }
-  },
-  "common_patterns": {
-    "imports": {
-      "external_crates": [
-        "ethers - Các tính năng blockchain",
-        "tokio - Async runtime",
-        "serde - Serialization",
-        "tracing - Logging",
-        "anyhow - Error handling"
-      ],
-      "std_modules": [
-        "std::sync - Arc, RwLock, Mutex",
-        "std::time - Duration, Instant",
-        "std::collections - HashMap, VecDeque"
-      ],
-      "internal_modules": [
-        "crate::chain_adapters - Blockchain adapters",
-        "crate::types - Common types",
-        "crate::utils - Utilities"
-      ]
-    },
-    "module_exports": {
-      "public_items": "Chỉ export các item cần thiết cho bên ngoài",
-      "reexports": "Sử dụng pub use cho các item thường xuyên sử dụng",
-      "visibility": "Giữ các implementation details private"
+    "*": {
+      "mutable_borrow": "Clone dữ liệu trước khi mượn mutable",
+      "lifetime": "Sử dụng Arc<T> để chia sẻ dữ liệu giữa các task",
+      "thread_safety": "Thêm Send + Sync cho trait objects",
+      "async_await": "Clone dữ liệu trước khi gọi .await"
     }
   }
 }

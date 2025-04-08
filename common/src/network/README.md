@@ -67,4 +67,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut quic_server = QuicServer::new(&config).await?;
     quic_server.start().await?;
     Ok(())
-} 
+}
+```
+
+### Tạo gRPC Server
+
+```rust
+use diamond_common::SnipeBotGrpcService;
+
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let grpc_service = SnipeBotGrpcService::new();
+    grpc_service.start("0.0.0.0:50051").await?;
+    Ok(())
+}
+```
+
+### Sử dụng Redis Service
+
+```rust
+use diamond_common::RedisService;
+
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let redis_service = RedisService::new("redis://localhost:6379").await?;
+    redis_service.set("key", "value").await?;
+    let value = redis_service.get("key").await?;
+    println!("Value: {}", value);
+    Ok(())
+}
+```
+
+## Lưu ý
+
+1. Các server nên được cấu hình với các tham số phù hợp:
+   - WebSocket: JWT secret, max connections, ping interval
+   - QUIC: Certificate, private key, max connections
+   - gRPC: Port, max connections, timeout
+   - Redis: URL, pool size, timeout
+
+2. Các server nên được khởi tạo và quản lý trong một context phù hợp:
+   - Sử dụng Arc<RwLock> cho shared state
+   - Sử dụng tokio::spawn cho các task độc lập
+   - Sử dụng tokio::select cho các event loop
+
+3. Các server nên được shutdown một cách graceful:
+   - Gửi shutdown signal
+   - Đợi các kết nối đóng
+   - Đóng các resource
+
+4. Các server nên được monitor và log:
+   - Số lượng kết nối
+   - Thời gian phản hồi
+   - Lỗi và cảnh báo

@@ -5,11 +5,20 @@ use axum::{
 };
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::{Duration as ChronoDuration, Utc};
 use uuid::Uuid;
-use std::collections::HashMap;
-use std::sync::RwLock;
+use std::{
+    collections::HashMap,
+    sync::RwLock,
+    time::{SystemTime, UNIX_EPOCH},
+    fmt::{self, Display, Formatter},
+    error::Error,
+    env,
+};
+use anyhow::{Result, Context};
+use tracing::{info, warn, error, debug};
+use async_trait::async_trait;
+use tokio::time::{timeout, sleep};
 use once_cell::sync::Lazy;
 
 // Cấu hình cho JWT
@@ -145,10 +154,9 @@ pub static TOKEN_BLACKLIST: Lazy<RwLock<TokenBlacklist>> = Lazy::new(|| {
     RwLock::new(TokenBlacklist::new())
 });
 
-// Lazy static cho JWT_SECRET
-lazy_static::lazy_static! {
-    static ref JWT_SECRET: String = std::env::var("JWT_SECRET").unwrap_or_else(|_| "diamond_secret_key_for_development_only".to_string());
-}
+static JWT_SECRET: Lazy<String> = Lazy::new(|| {
+    env::var("JWT_SECRET").unwrap_or_else(|_| "your-secret-key".to_string())
+});
 
 // Tạo JWT token
 pub fn create_jwt_token(
@@ -311,6 +319,18 @@ where
             }
         };
         
+        // Kiểm tra blacklist
+        if (self.blacklist_checker)(token) {
+            return Err((self.error_handler)(JWTAuthError::BlacklistedToken));
+        }
+        
+        // Kiểm tra rate limit
+        let rate_limit_key = format!("{}:{}", extract_client_ip(&request).unwrap_or_else(|| "unknown".to_string()), token);
+        
+        if !(self.rate_limit_checker)(&rate_limit_key, 100) {
+            return Err((self.error_handler)(JWTAuthError::RateLimitExceeded));
+        }
+        
         // Giải mã token
         let claims = match decode::<Claims>(
             token,
@@ -322,18 +342,6 @@ where
                 return Err((self.error_handler)(JWTAuthError::InvalidToken(format!("Token invalid: {}", e))));
             }
         };
-        
-        // Kiểm tra token có trong blacklist không
-        if (self.blacklist_checker)(&claims.jti) {
-            return Err((self.error_handler)(JWTAuthError::BlacklistedToken));
-        }
-        
-        // Kiểm tra rate limit
-        let rate_limit_key = format!("{}:{}", extract_client_ip(&request).unwrap_or_else(|| "unknown".to_string()), claims.sub);
-        
-        if !(self.rate_limit_checker)(&rate_limit_key, 100) {
-            return Err((self.error_handler)(JWTAuthError::RateLimitExceeded));
-        }
         
         // Gắn thông tin user vào request extensions
         let mut req = request;
@@ -365,4 +373,57 @@ where
     
     // Không có quyền yêu cầu
     Err(error_response())
+}
+
+/// Module tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test tạo và giải mã JWT token
+    #[test]
+    fn test_jwt_token() {
+        let token = create_jwt_token(
+            "user1",
+            UserRole::User,
+            vec!["wallet1".to_string()],
+            24,
+        ).unwrap();
+        
+        let claims = decode_jwt_token(&token).unwrap();
+        assert_eq!(claims.sub, "user1");
+        assert_eq!(claims.role, "user");
+        assert_eq!(claims.wallet_ids, vec!["wallet1"]);
+    }
+
+    /// Test blacklist token
+    #[test]
+    fn test_token_blacklist() {
+        let mut blacklist = TokenBlacklist::new();
+        let jti = "test_jti".to_string();
+        let exp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() + 3600;
+            
+        blacklist.add_token(jti.clone(), exp);
+        assert!(blacklist.is_blacklisted(&jti));
+    }
+
+    /// Test role middleware
+    #[test]
+    fn test_role_middleware() {
+        let claims = Claims {
+            sub: "user1".to_string(),
+            role: "admin".to_string(),
+            wallet_ids: vec![],
+            exp: 0,
+            nbf: 0,
+            iat: 0,
+            jti: "test".to_string(),
+        };
+        
+        let required_roles = vec!["admin"];
+        assert!(required_roles.contains(&claims.role.as_str()));
+    }
 } 
