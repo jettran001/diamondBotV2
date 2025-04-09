@@ -1,258 +1,242 @@
 // External imports
 use ethers::{
-    abi::{self, Token},
-    contract::Contract,
-    middleware::Middleware,
-    types::{Address, Bytes},
+    prelude::*,
+    providers::{Http, Provider, Middleware},
+    types::{Address, U256, H256, Bytes},
+    utils::keccak256,
 };
-
-// Standard library imports
-use std::{
-    sync::Arc,
-    str::FromStr,
-    fs,
-    path::Path,
-};
-
-// Third party imports
-use anyhow::{Result, anyhow, Context};
+use anyhow::{Result, Context, anyhow};
+use thiserror::Error;
 use serde::{Serialize, Deserialize};
-use tracing::{info, warn, error, debug};
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+use std::time::{Instant, Duration};
+use std::str::FromStr;
+use tracing::{debug, error, info, warn};
 
-/// Thông tin về smart contract
+// Internal imports
+use crate::abi::abis::{PAIR_ABI, FACTORY_ABI, ERC20_ABI, ROUTER_ABI};
+
+// Error type for contract operations
+#[derive(Error, Debug)]
+pub enum ContractError {
+    #[error("Contract initialization error: {0}")]
+    InitializationError(String),
+
+    #[error("Contract call error: {0}")]
+    CallError(String),
+
+    #[error("ABI error: {0}")]
+    AbiError(String),
+
+    #[error("Contract address error: {0}")]
+    AddressError(String),
+
+    #[error("Provider error: {0}")]
+    ProviderError(String),
+}
+
+// Cache entry for contract data
+#[derive(Debug, Clone)]
+pub struct CacheEntry<T> {
+    pub value: T,
+    pub expires_at: Instant,
+}
+
+impl<T> CacheEntry<T> {
+    pub fn new(value: T, ttl_seconds: u64) -> Self {
+        Self {
+            value,
+            expires_at: Instant::now() + Duration::from_secs(ttl_seconds),
+        }
+    }
+
+    pub fn is_expired(&self) -> bool {
+        Instant::now() > self.expires_at
+    }
+}
+
+// Contract Manager handles contract interactions and caching
+#[derive(Debug)]
+pub struct ContractManager<M: Middleware + 'static> {
+    provider: Arc<M>,
+    contract_cache: Arc<RwLock<HashMap<Address, CacheEntry<Contract<Arc<M>>>>>>,
+    abi_cache: Arc<RwLock<HashMap<String, CacheEntry<ethers::abi::Abi>>>>,
+    contracts_info: Arc<RwLock<HashMap<Address, ContractInfo>>>,
+}
+
+// Contract information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContractInfo {
-    /// Địa chỉ của contract
-    pub address: String,
-    /// Tên của contract
+    pub address: Address,
     pub name: String,
-    /// ABI của contract dạng JSON string
-    pub abi: String,
-    /// Chain ID nơi contract được triển khai
-    pub chain_id: u64,
-    /// Thời gian tạo (Unix timestamp)
-    pub created_at: u64,
-    /// Thời gian sử dụng gần nhất (Unix timestamp)
-    pub last_used: u64,
-    /// Trạng thái xác minh
+    pub symbol: Option<String>,
+    pub decimals: Option<u8>,
+    pub contract_type: ContractType,
     pub verified: bool,
+    pub chain_id: u64,
+    pub created_at: u64,
+    pub bytecode_hash: Option<H256>,
 }
 
-/// Quản lý các smart contract
-pub struct ContractManager {
-    /// Danh sách các contract đã lưu
-    contracts: Vec<ContractInfo>,
-    /// Đường dẫn lưu trữ
-    path: String,
+// Contract types
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ContractType {
+    ERC20,
+    ERC721,
+    DEXPair,
+    DEXFactory,
+    DEXRouter,
+    MultiSig,
+    Unknown,
 }
 
-impl ContractManager {
-    /// Tạo contract manager mới từ đường dẫn
-    pub async fn new(path: &str) -> Result<Self> {
-        let contracts = if Path::new(path).exists() {
-            let content = fs::read_to_string(path)
-                .with_context(|| format!("Không thể đọc file contracts: {}", path))?;
-            serde_json::from_str(&content)
-                .with_context(|| format!("Không thể parse JSON từ file {}", path))?
-        } else {
-            Vec::new()
-        };
-        
-        let manager = Self {
-            contracts,
-            path: path.to_string(),
-        };
-        
-        Ok(manager)
+impl<M: Middleware + 'static> ContractManager<M> {
+    // Create a new contract manager
+    pub fn new(provider: Arc<M>) -> Self {
+        Self {
+            provider,
+            contract_cache: Arc::new(RwLock::new(HashMap::new())),
+            abi_cache: Arc::new(RwLock::new(HashMap::new())),
+            contracts_info: Arc::new(RwLock::new(HashMap::new())),
+        }
     }
-    
-    /// Lưu trạng thái hiện tại vào file
-    pub fn save(&self) -> Result<()> {
-        let content = serde_json::to_string_pretty(&self.contracts)
-            .with_context(|| "Không thể serialize contracts to JSON")?;
-        
-        let dir_path = Path::new(&self.path).parent();
-        if let Some(dir) = dir_path {
-            if !dir.exists() {
-                fs::create_dir_all(dir)
-                    .with_context(|| format!("Không thể tạo thư mục: {:?}", dir))?;
+
+    // Get a contract instance by address with default ERC20 ABI
+    pub async fn get_erc20(&self, address: Address) -> Result<Contract<Arc<M>>> {
+        self.get_contract_with_abi(address, "erc20", ERC20_ABI).await
+    }
+
+    // Get a DEX pair contract
+    pub async fn get_pair(&self, address: Address) -> Result<Contract<Arc<M>>> {
+        self.get_contract_with_abi(address, "pair", PAIR_ABI).await
+    }
+
+    // Get a DEX factory contract
+    pub async fn get_factory(&self, address: Address) -> Result<Contract<Arc<M>>> {
+        self.get_contract_with_abi(address, "factory", FACTORY_ABI).await
+    }
+
+    // Get a DEX router contract
+    pub async fn get_router(&self, address: Address) -> Result<Contract<Arc<M>>> {
+        self.get_contract_with_abi(address, "router", ROUTER_ABI).await
+    }
+
+    // Get contract with custom ABI
+    pub async fn get_contract_with_abi(&self, address: Address, abi_key: &str, abi_json: &str) -> Result<Contract<Arc<M>>> {
+        // Check cache first
+        if let Ok(cache) = self.contract_cache.read() {
+            if let Some(entry) = cache.get(&address) {
+                if !entry.is_expired() {
+                    return Ok(entry.value.clone());
+                }
             }
         }
-        
-        fs::write(&self.path, content)
-            .with_context(|| format!("Không thể ghi file: {}", self.path))?;
-        
-        Ok(())
-    }
-    
-    /// Thêm contract mới
-    pub fn add_contract(&mut self, contract: ContractInfo) -> Result<()> {
-        // Kiểm tra contract đã tồn tại chưa
-        if self.contracts.iter().any(|c| 
-            c.address.to_lowercase() == contract.address.to_lowercase() && 
-            c.chain_id == contract.chain_id
-        ) {
-            return Err(anyhow!("Contract đã tồn tại"));
-        }
-        
-        // Kiểm tra ABI hợp lệ
-        let _: abi::Abi = serde_json::from_str(&contract.abi)
-            .with_context(|| "ABI không hợp lệ")?;
-        
-        self.contracts.push(contract);
-        self.save()?;
-        
-        Ok(())
-    }
-    
-    /// Lấy thông tin contract theo địa chỉ và chain ID
-    pub fn get_contract(&self, address: &str, chain_id: u64) -> Option<&ContractInfo> {
-        self.contracts.iter().find(|c| 
-            c.address.to_lowercase() == address.to_lowercase() && 
-            c.chain_id == chain_id
-        )
-    }
-    
-    /// Lấy danh sách tất cả các contract
-    pub fn get_all_contracts(&self) -> &[ContractInfo] {
-        &self.contracts
-    }
-    
-    /// Lấy danh sách contract theo chain ID
-    pub fn get_contracts_by_chain(&self, chain_id: u64) -> Vec<&ContractInfo> {
-        self.contracts.iter()
-            .filter(|c| c.chain_id == chain_id)
-            .collect()
-    }
-    
-    /// Cập nhật thời gian sử dụng gần nhất
-    pub fn update_last_used(&mut self, address: &str, chain_id: u64) -> Result<()> {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        
-        let contract = self.contracts.iter_mut()
-            .find(|c| c.address.to_lowercase() == address.to_lowercase() && c.chain_id == chain_id)
-            .ok_or_else(|| anyhow!("Contract không tồn tại"))?;
-        
-        contract.last_used = now;
-        self.save()?;
-        
-        Ok(())
-    }
-    
-    /// Xóa contract
-    pub fn remove_contract(&mut self, address: &str, chain_id: u64) -> Result<()> {
-        let initial_len = self.contracts.len();
-        
-        self.contracts.retain(|c| 
-            c.address.to_lowercase() != address.to_lowercase() || 
-            c.chain_id != chain_id
-        );
-        
-        if self.contracts.len() == initial_len {
-            return Err(anyhow!("Contract không tồn tại"));
-        }
-        
-        self.save()?;
-        
-        Ok(())
-    }
-    
-    /// Tương tác với contract
-    pub async fn interact<M, T>(&self, client: Arc<M>, address: &str, function: &str, args: Vec<T>) -> Result<Bytes> 
-    where
-        M: Middleware + 'static,
-        T: Into<Token> + Send + Sync,
-    {
-        // Lấy chain ID từ client
-        let chain_id = client.get_chainid().await?;
-        
-        // Tìm thông tin contract
-        let contract_info = self.get_contract(address, chain_id.as_u64())
-            .ok_or_else(|| anyhow!("Contract không tìm thấy"))?;
-        
-        // Parse địa chỉ contract
-        let contract_address = Address::from_str(address)
-            .with_context(|| format!("Địa chỉ contract không hợp lệ: {}", address))?;
-        
-        // Parse ABI của contract
-        let abi: abi::Abi = serde_json::from_str(&contract_info.abi)
-            .with_context(|| "Không thể parse ABI")?;
-        
-        // Tạo contract instance
-        let contract = Contract::new(contract_address, abi, client);
-        
-        // Chuyển đổi tham số
-        let params: Vec<Token> = args.into_iter()
-            .map(|arg| arg.into())
-            .collect();
-        
-        // Gọi phương thức
-        let result = contract.method(function, params)
-            .with_context(|| format!("Lỗi khi chuẩn bị gọi hàm {}", function))?
-            .call()
-            .await
-            .with_context(|| format!("Lỗi khi gọi hàm {}", function))?;
-        
-        // Cập nhật thời gian sử dụng gần nhất
-        let mut manager = self.clone();
-        let _ = manager.update_last_used(address, chain_id.as_u64());
-        
-        Ok(result)
-    }
-    
-    /// Tương tác với contract sử dụng Token trực tiếp
-    pub async fn interact_with_tokens<M>(&self, client: Arc<M>, address: &str, function: &str, args: Vec<Token>) -> Result<Bytes> 
-    where
-        M: Middleware + 'static,
-    {
-        // Lấy chain ID từ client
-        let chain_id = client.get_chainid().await?;
-        
-        // Tìm thông tin contract
-        let contract_info = self.get_contract(address, chain_id.as_u64())
-            .ok_or_else(|| anyhow!("Contract không tìm thấy"))?;
-        
-        // Parse địa chỉ contract
-        let contract_address = Address::from_str(address)
-            .with_context(|| format!("Địa chỉ contract không hợp lệ: {}", address))?;
-        
-        // Parse ABI của contract
-        let abi: abi::Abi = serde_json::from_str(&contract_info.abi)
-            .with_context(|| "Không thể parse ABI")?;
-        
-        // Tạo contract instance
-        let contract = Contract::new(contract_address, abi, client);
-        
-        // Gọi phương thức với tham số đã được chuyển đổi sẵn
-        let result = contract.method(function, args)
-            .with_context(|| format!("Lỗi khi chuẩn bị gọi hàm {}", function))?
-            .call()
-            .await
-            .with_context(|| format!("Lỗi khi gọi hàm {}", function))?;
-        
-        // Cập nhật thời gian sử dụng gần nhất
-        let mut manager = self.clone();
-        let _ = manager.update_last_used(address, chain_id.as_u64());
-        
-        Ok(result)
-    }
-    
-    /// Kiểm tra ABI hợp lệ
-    pub fn validate_abi(abi_str: &str) -> Result<()> {
-        let _: abi::Abi = serde_json::from_str(abi_str)
-            .with_context(|| "ABI không hợp lệ")?;
-        Ok(())
-    }
-}
 
-impl Clone for ContractManager {
-    fn clone(&self) -> Self {
-        Self {
-            contracts: self.contracts.clone(),
-            path: self.path.clone(),
+        // Get ABI from cache or parse
+        let abi = if let Ok(abi_cache) = self.abi_cache.read() {
+            if let Some(entry) = abi_cache.get(abi_key) {
+                if !entry.is_expired() {
+                    entry.value.clone()
+                } else {
+                    self.parse_and_cache_abi(abi_key, abi_json).await?
+                }
+            } else {
+                self.parse_and_cache_abi(abi_key, abi_json).await?
+            }
+        } else {
+            self.parse_and_cache_abi(abi_key, abi_json).await?
+        };
+
+        // Create contract
+        let contract = Contract::new(address, abi, self.provider.clone());
+
+        // Cache contract
+        if let Ok(mut cache) = self.contract_cache.write() {
+            cache.insert(address, CacheEntry::new(contract.clone(), 3600)); // 1 hour
+        }
+
+        Ok(contract)
+    }
+
+    // Parse ABI and cache it
+    async fn parse_and_cache_abi(&self, abi_key: &str, abi_json: &str) -> Result<ethers::abi::Abi> {
+        let abi: ethers::abi::Abi = serde_json::from_str(abi_json)
+            .map_err(|e| anyhow!(ContractError::AbiError(e.to_string())))?;
+
+        if let Ok(mut cache) = self.abi_cache.write() {
+            cache.insert(abi_key.to_string(), CacheEntry::new(abi.clone(), 86400)); // 24 hours
+        }
+
+        Ok(abi)
+    }
+
+    // Get token info
+    pub async fn get_token_info(&self, address: Address) -> Result<ContractInfo> {
+        // Check cache
+        if let Ok(info_cache) = self.contracts_info.read() {
+            if let Some(info) = info_cache.get(&address) {
+                return Ok(info.clone());
+            }
+        }
+
+        // Get the ERC20 contract
+        let contract = self.get_erc20(address).await?;
+
+        // Build token info
+        let mut info = ContractInfo {
+            address,
+            name: "Unknown".to_string(),
+            symbol: None,
+            decimals: None,
+            contract_type: ContractType::Unknown,
+            verified: false,
+            chain_id: 0,
+            created_at: 0,
+            bytecode_hash: None,
+        };
+
+        // Try to get basic token info
+        if let Ok(name) = contract.method::<_, String>("name", ()).call().await {
+            info.name = name;
+        }
+
+        if let Ok(symbol) = contract.method::<_, String>("symbol", ()).call().await {
+            info.symbol = Some(symbol);
+        }
+
+        if let Ok(decimals) = contract.method::<_, u8>("decimals", ()).call().await {
+            info.decimals = Some(decimals);
+        }
+
+        // Try to determine contract type
+        if info.symbol.is_some() && info.decimals.is_some() {
+            info.contract_type = ContractType::ERC20;
+        }
+
+        // Get chain ID
+        if let Ok(chain_id) = self.provider.get_chainid().await {
+            info.chain_id = chain_id.as_u64();
+        }
+
+        // Cache the info
+        if let Ok(mut cache) = self.contracts_info.write() {
+            cache.insert(address, info.clone());
+        }
+
+        Ok(info)
+    }
+
+    // Clean expired cache entries
+    pub fn cleanup_cache(&self) {
+        // Clean contract cache
+        if let Ok(mut cache) = self.contract_cache.write() {
+            cache.retain(|_, entry| !entry.is_expired());
+        }
+
+        // Clean ABI cache
+        if let Ok(mut cache) = self.abi_cache.write() {
+            cache.retain(|_, entry| !entry.is_expired());
         }
     }
 }
@@ -260,59 +244,22 @@ impl Clone for ContractManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use tempfile::tempdir;
-    
-    fn create_test_contract() -> ContractInfo {
-        ContractInfo {
-            address: "0x1234567890123456789012345678901234567890".to_string(),
-            name: "Test Contract".to_string(),
-            abi: r#"[{"inputs":[],"stateMutability":"nonpayable","type":"constructor"}]"#.to_string(),
-            chain_id: 1,
-            created_at: 1617235200,
-            last_used: 1617235200,
-            verified: true,
-        }
-    }
-    
-    #[tokio::test]
-    async fn test_contract_manager() {
-        let temp_dir = tempdir().unwrap();
-        let path = temp_dir.path().join("contracts.json");
-        let path_str = path.to_str().unwrap();
-        
-        let mut manager = ContractManager::new(path_str).await.unwrap();
-        let contract = create_test_contract();
-        
-        // Thêm contract
-        assert!(manager.add_contract(contract.clone()).is_ok());
-        
-        // Kiểm tra contract đã thêm
-        let retrieved = manager.get_contract(&contract.address, contract.chain_id);
-        assert!(retrieved.is_some());
-        let retrieved = retrieved.unwrap();
-        assert_eq!(retrieved.name, "Test Contract");
-        
-        // Không thể thêm contract trùng
-        assert!(manager.add_contract(contract.clone()).is_err());
-        
-        // Lấy contract theo chain
-        let chain_contracts = manager.get_contracts_by_chain(1);
-        assert_eq!(chain_contracts.len(), 1);
-        
-        // Xóa contract
-        assert!(manager.remove_contract(&contract.address, contract.chain_id).is_ok());
-        assert!(manager.get_contract(&contract.address, contract.chain_id).is_none());
-    }
-    
+    use std::time::Duration;
+
     #[test]
-    fn test_validate_abi() {
-        // ABI hợp lệ
-        let valid_abi = r#"[{"inputs":[],"stateMutability":"nonpayable","type":"constructor"}]"#;
-        assert!(ContractManager::validate_abi(valid_abi).is_ok());
-        
-        // ABI không hợp lệ
-        let invalid_abi = "not a json";
-        assert!(ContractManager::validate_abi(invalid_abi).is_err());
+    fn test_cache_entry() {
+        let value = "test";
+        let entry = CacheEntry::new(value, 1);
+        assert!(!entry.is_expired());
+
+        // Wait for expiration
+        std::thread::sleep(Duration::from_secs(2));
+        assert!(entry.is_expired());
     }
-} 
+
+    #[test]
+    fn test_contract_type() {
+        assert_ne!(ContractType::ERC20, ContractType::Unknown);
+        assert_eq!(ContractType::ERC20, ContractType::ERC20);
+    }
+}

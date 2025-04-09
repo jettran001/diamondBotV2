@@ -6,3 +6,15 @@ channel = "stable-24_05"
 
 [deployment]
 run = ["sh", "-c", "cargo run"]
+
+[workflows]
+runButton = "Build"
+
+[[workflows.workflow]]
+name = "Build"
+author = 41318338
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd common && cargo build && cd ../wallet && cargo build"

@@ -1,4 +1,18 @@
 use aes_gcm::{
+    aead::{Aead, KeyInit, Payload},
+    Aes256Gcm, Nonce,
+};
+use sha2::{Sha256, Digest};
+use zeroize::{Zeroize, ZeroizeOnDrop};
+use rand::{rngs::OsRng, RngCore};
+use anyhow::{Result, Context, anyhow};
+use std::fs::{self, File};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+use chrono::{DateTime, Utc, Duration};
+use aes_gcm::{
     aead::{Aead, KeyInit, generic_array::GenericArray},
     Aes256Gcm,
 };
@@ -23,7 +37,67 @@ use argon2::{
     password_hash::PasswordHasher,
 };
 
-/// Cấu trúc dữ liệu ví bảo mật
+
+// Cache entry standard structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CacheEntry<T> {
+    pub value: T,
+    pub expires_at: DateTime<Utc>,
+}
+
+impl<T> CacheEntry<T> {
+    pub fn new(value: T, ttl_seconds: i64) -> Self {
+        Self {
+            value,
+            expires_at: Utc::now() + Duration::seconds(ttl_seconds),
+        }
+    }
+
+    pub fn is_expired(&self) -> bool {
+        Utc::now() > self.expires_at
+    }
+}
+
+// Sensitive data container with automatic zeroing
+#[derive(Zeroize, ZeroizeOnDrop, Serialize, Deserialize)]
+pub struct SensitiveData {
+    #[zeroize(skip)]
+    pub identifier: String,
+    pub data: Vec<u8>,
+}
+
+impl SensitiveData {
+    pub fn new(identifier: &str, data: Vec<u8>) -> Self {
+        Self {
+            identifier: identifier.to_string(),
+            data,
+        }
+    }
+}
+
+// Security error types
+#[derive(Debug, thiserror::Error)]
+pub enum SecurityError {
+    #[error("Encryption error: {0}")]
+    EncryptionError(String),
+
+    #[error("Decryption error: {0}")]
+    DecryptionError(String),
+
+    #[error("IO error: {0}")]
+    IoError(String),
+
+    #[error("Password error: {0}")]
+    PasswordError(String),
+
+    #[error("Format error: {0}")]
+    FormatError(String),
+
+    #[error("Key derivation error: {0}")]
+    KeyDerivationError(String),
+}
+
+// Cấu trúc dữ liệu ví bảo mật
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletInfo {
     pub address: String,
@@ -40,7 +114,7 @@ pub struct WalletInfo {
     pub is_hardware: bool,
 }
 
-/// Cấu trúc dữ liệu mã hóa
+// Cấu trúc dữ liệu mã hóa
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EncryptedData {
     pub ciphertext: Vec<u8>,
@@ -49,7 +123,7 @@ pub struct EncryptedData {
     pub version: u8,  // Phiên bản của thuật toán mã hóa
 }
 
-/// View an toàn của wallet để hiển thị
+// View an toàn của wallet để hiển thị
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SafeWalletView {
     pub address: String,
@@ -64,7 +138,194 @@ pub struct SafeWalletView {
     pub is_hardware: bool,
 }
 
-/// Cấu hình cho lưu trữ ví
+
+// Secure storage manager
+pub struct SecureWalletStorage {
+    storage_path: PathBuf,
+    // Cache for loaded wallets
+    wallet_cache: Arc<RwLock<HashMap<String, CacheEntry<SensitiveData>>>>,
+    salt: [u8; 16],
+    wallets: HashMap<String, WalletInfo>,
+    current_key: EncryptionKey,
+
+}
+
+impl SecureWalletStorage {
+    // Create a new secure storage
+    pub fn new(storage_path: PathBuf, config: &StorageConfig) -> Result<Self> {
+        let salt_vec = config.encryption_salt.as_bytes().to_vec();
+        let mut salt = [0u8; 16];
+        salt.copy_from_slice(&salt_vec[0..16]);
+
+        fs::create_dir_all(&storage_path)
+            .with_context(|| format!("Failed to create storage directory at {:?}", storage_path))?;
+
+
+        let key_id = format!("key-{}", Self::rand_hex_string(8));
+        let key = Self::generate_encryption_key("default", &salt)?;
+        let mut wallets = HashMap::new();
+
+        // Tải ví từ đĩa nếu tệp tồn tại
+        let wallet_path = storage_path.clone().join(&config.wallet_filename);
+        if wallet_path.exists() {
+            if let Ok(loaded_wallets) = load_wallets(&wallet_path) {
+                for wallet in loaded_wallets {
+                    wallets.insert(wallet.address.clone(), wallet);
+                }
+            }
+        }
+
+        Ok(Self {
+            storage_path,
+            wallet_cache: Arc::new(RwLock::new(HashMap::new())),
+            salt,
+            wallets,
+            current_key: EncryptionKey {
+                key_id,
+                key,
+                created_at: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+            },
+        })
+    }
+
+    // Store sensitive data securely
+    pub fn store_wallet(&mut self, wallet_info: &WalletInfo, password: &str) -> Result<()> {
+        let key = self.derive_key(password)?;
+        let identifier = wallet_info.address.clone();
+        let data = serde_json::to_vec(wallet_info)?;
+        let mut nonce_bytes = [0u8; 12];
+        OsRng.fill_bytes(&mut nonce_bytes);
+        let nonce = Nonce::from_slice(&nonce_bytes);
+
+        let cipher = Aes256Gcm::new_from_slice(&key)
+            .map_err(|e| SecurityError::EncryptionError(e.to_string()))?;
+
+        let encrypted_data = cipher.encrypt(nonce, Payload {
+            msg: &data,
+            aad: identifier.as_bytes(),
+        })
+        .map_err(|e| SecurityError::EncryptionError(e.to_string()))?;
+
+        let mut file_content = Vec::with_capacity(nonce_bytes.len() + encrypted_data.len());
+        file_content.extend_from_slice(&nonce_bytes);
+        file_content.extend_from_slice(&encrypted_data);
+
+        let file_path = self.get_file_path(&identifier);
+        fs::write(&file_path, &file_content)
+            .with_context(|| format!("Failed to write encrypted data to {:?}", file_path))?;
+
+        Ok(())
+    }
+
+    // Load sensitive data
+    pub fn load_wallet(&self, address: &str, password: &str) -> Result<WalletInfo> {
+        let file_path = self.get_file_path(address);
+        let file_content = fs::read(&file_path)
+            .with_context(|| format!("Failed to read encrypted data from {:?}", file_path))?;
+
+        if file_content.len() < 12 {
+            return Err(anyhow!(SecurityError::FormatError(
+                "Encrypted file is too short".to_string()
+            )));
+        }
+
+        let (nonce_bytes, encrypted_data) = file_content.split_at(12);
+        let nonce = Nonce::from_slice(nonce_bytes);
+
+        let key = self.derive_key(password)?;
+        let cipher = Aes256Gcm::new_from_slice(&key)
+            .map_err(|e| SecurityError::DecryptionError(e.to_string()))?;
+
+        let decrypted_data = cipher.decrypt(nonce, Payload {
+            msg: encrypted_data,
+            aad: address.as_bytes(),
+        })
+        .map_err(|e| SecurityError::DecryptionError(e.to_string()))?;
+
+        let wallet_info: WalletInfo = serde_json::from_slice(&decrypted_data)?;
+        Ok(wallet_info)
+    }
+
+    // Delete sensitive data
+    pub fn delete_wallet(&self, address: &str) -> Result<()> {
+        let file_path = self.get_file_path(address);
+
+        if file_path.exists() {
+            fs::remove_file(&file_path)
+                .with_context(|| format!("Failed to delete file at {:?}", file_path))?;
+        }
+
+        Ok(())
+    }
+
+    // Helper: Get file path for an identifier
+    fn get_file_path(&self, identifier: &str) -> PathBuf {
+        self.storage_path.join(format!("{}.bin", identifier))
+    }
+
+    // Helper: Derive encryption key from password
+    fn derive_key(&self, password: &str) -> Result<[u8; 32]> {
+        let mut hasher = Sha256::new();
+        hasher.update(password.as_bytes());
+        hasher.update(&self.salt);
+
+        let result = hasher.finalize();
+        let mut key = [0u8; 32];
+        key.copy_from_slice(&result);
+
+        Ok(key)
+    }
+    /// Tạo hàm trợ giúp tạo chuỗi hex ngẫu nhiên
+    fn rand_hex_string(len: usize) -> String {
+        let mut bytes = vec![0u8; len];
+        OsRng.fill_bytes(&mut bytes);
+        hex::encode(bytes)
+    }
+    
+     /// Tạo khóa từ mật khẩu sử dụng Argon2
+    fn generate_encryption_key(password: &str, salt: &[u8]) -> Result<[u8; 32]> {
+        // Tạo một Argon2 context
+        let argon2 = Argon2::new(
+            Algorithm::Argon2id, 
+            Version::V0x13, 
+            Params::new(4096, 3, 4, Some(32)).unwrap()
+        );
+        
+        // Tạo salt string từ slice
+        let mut random_salt = [0u8; 16];
+        OsRng.fill_bytes(&mut random_salt);
+        
+        // Đảm bảo có một số byte từ salt ban đầu trong random_salt
+        for i in 0..std::cmp::min(salt.len(), 8) {
+            random_salt[i] ^= salt[i];  // XOR để kết hợp giá trị
+        }
+        
+        // Sử dụng từ khóa từ tài liệu của password-hash
+        let salt_str = SaltString::encode_b64(&random_salt)
+            .map_err(|e| anyhow!("Failed to encode salt: {}", e))?;
+        
+        // Hash mật khẩu
+        let hash = argon2
+            .hash_password(password.as_bytes(), &salt_str)
+            .map_err(|e| anyhow!("Failed to hash password: {}", e))?;
+            
+        // Lấy bytes từ hash
+        let hash_wrapped = hash.hash.unwrap();
+        let hash_bytes = hash_wrapped.as_bytes();
+        
+        // Sao chép 32 bytes đầu tiên vào key
+        let mut key = [0u8; 32];
+        key.copy_from_slice(&hash_bytes[0..32]);
+        
+        Ok(key)
+    }
+}
+
+
+// Cấu hình cho lưu trữ ví
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorageConfig {
     pub wallet_dir: String,
@@ -82,7 +343,17 @@ impl Default for StorageConfig {
     }
 }
 
-/// Khóa mã hóa
+fn load_wallets(path: &Path) -> Result<Vec<WalletInfo>> {
+    let file_content = fs::read(path)
+        .context("Failed to read wallet file")?;
+
+    let wallet_data: Vec<WalletInfo> = serde_json::from_slice(&file_content)
+        .context("Failed to parse wallet data")?;
+
+    Ok(wallet_data)
+}
+
+// Khóa mã hóa
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct EncryptionKey {
@@ -122,484 +393,8 @@ impl EncryptionKey {
         }
     }
     
-    /// Tạo khóa từ mật khẩu sử dụng Argon2
-    fn from_password(password: &str, salt: &[u8]) -> Result<Self> {
-        use argon2::{
-            Argon2, 
-            Algorithm, 
-            Params, 
-            Version
-        };
-        
-        // Tạo một Argon2 context
-        let argon2 = Argon2::new(
-            Algorithm::Argon2id, 
-            Version::V0x13, 
-            Params::new(4096, 3, 4, Some(32)).unwrap()
-        );
-        
-        // Tạo salt string từ slice
-        let mut random_salt = [0u8; 16];
-        OsRng.fill_bytes(&mut random_salt);
-        
-        // Đảm bảo có một số byte từ salt ban đầu trong random_salt
-        for i in 0..std::cmp::min(salt.len(), 8) {
-            random_salt[i] ^= salt[i];  // XOR để kết hợp giá trị
-        }
-        
-        // Sử dụng từ khóa từ tài liệu của password-hash
-        let salt_str = SaltString::encode_b64(&random_salt)
-            .map_err(|e| anyhow!("Failed to encode salt: {}", e))?;
-        
-        // Hash mật khẩu
-        let hash = argon2
-            .hash_password(password.as_bytes(), &salt_str)
-            .map_err(|e| anyhow!("Failed to hash password: {}", e))?;
-            
-        // Lấy bytes từ hash
-        let hash_wrapped = hash.hash.unwrap();
-        let hash_bytes = hash_wrapped.as_bytes();
-        
-        // Sao chép 32 bytes đầu tiên vào key
-        let mut key = [0u8; 32];
-        key.copy_from_slice(&hash_bytes[0..32]);
-        
-        Ok(Self {
-            key_id: hex::encode(&salt[0..16]),
-            key,
-            created_at: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-        })
-    }
 }
 
-/// SecureWalletStorage - Quản lý lưu trữ ví an toàn
-pub struct SecureWalletStorage {
-    wallets: HashMap<String, WalletInfo>,
-    wallet_path: PathBuf,
-    current_key: EncryptionKey,
-    salt: Vec<u8>,
-}
-
-impl SecureWalletStorage {
-    /// Tạo hàm trợ giúp tạo chuỗi hex ngẫu nhiên
-    fn rand_hex_string(len: usize) -> String {
-        let mut bytes = vec![0u8; len];
-        OsRng.fill_bytes(&mut bytes);
-        hex::encode(bytes)
-    }
-
-    /// Tạo kho lưu trữ mới
-    pub fn new(config: &StorageConfig) -> Result<Self> {
-        let salt = config.encryption_salt.as_bytes().to_vec();
-        let wallet_path = Path::new(&config.wallet_dir).join(&config.wallet_filename);
-        
-        // Tạo khóa mặc định
-        let key_id = format!("key-{}", Self::rand_hex_string(8));
-        let key = Self::generate_encryption_key("default", &salt)?;
-        
-        let mut storage = SecureWalletStorage {
-            wallets: HashMap::new(),
-            wallet_path,
-            current_key: EncryptionKey {
-                key_id,
-                key,
-                created_at: SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-            },
-            salt,
-        };
-        
-        // Tải ví từ đĩa nếu tệp tồn tại
-        if storage.wallet_path.exists() {
-            if let Ok(wallets) = storage.load_wallets() {
-                for wallet in wallets {
-                    storage.wallets.insert(wallet.address.clone(), wallet);
-                }
-            }
-        }
-        
-        Ok(storage)
-    }
-
-    /// Tải ví từ đĩa
-    pub fn load_wallets(&self) -> Result<Vec<WalletInfo>> {
-        if !self.wallet_path.exists() {
-            debug!("Wallet file does not exist, returning empty list");
-            return Ok(Vec::new());
-        }
-
-        debug!("Loading wallets from: {:?}", self.wallet_path);
-        
-        // Sử dụng std::fs thay vì tokio::fs
-        let file_content = fs::read(&self.wallet_path)
-            .context("Failed to read wallet file")?;
-
-        let wallet_data: Vec<WalletInfo> = serde_json::from_slice(&file_content)
-            .context("Failed to parse wallet data")?;
-
-        Ok(wallet_data)
-    }
-
-    /// Lưu ví vào tệp
-    pub fn save_to_file(&self) -> Result<()> {
-        let wallets: Vec<WalletInfo> = self.wallets.values().cloned().collect();
-        
-        debug!("Saving {} wallets to storage", wallets.len());
-        
-        let wallets_json = serde_json::to_string_pretty(&wallets)
-            .context("Failed to serialize wallets")?;
-        
-        let temp_path = format!("{}.tmp", self.wallet_path.display());
-        fs::write(&temp_path, wallets_json)
-            .with_context(|| format!("Failed to write wallet file: {}", temp_path))?;
-        
-        fs::rename(&temp_path, &self.wallet_path)
-            .with_context(|| format!("Failed to rename temp file to wallet file: {}", self.wallet_path.display()))?;
-        
-        debug!("Saved {} wallets to storage", self.wallets.len());
-        Ok(())
-    }
-
-    /// Hỗ trợ clone từ RwLockReadGuard để tránh vấn đề borrow checker
-    pub fn clone_from_lock(storage: &Self) -> Self {
-        Self {
-            wallets: storage.wallets.clone(),
-            wallet_path: storage.wallet_path.clone(),
-            current_key: storage.current_key.clone(),
-            salt: storage.salt.clone(),
-        }
-    }
-
-    /// Lưu tất cả ví vào file
-    pub fn save(&self) -> Result<()> {
-        let wallets: Vec<WalletInfo> = self.wallets.values().cloned().collect();
-        let wallets_json = serde_json::to_string_pretty(&wallets)
-            .context("Failed to serialize wallets")?;
-        
-        let temp_path = format!("{}.tmp", self.wallet_path.display());
-        fs::write(&temp_path, wallets_json)
-            .with_context(|| format!("Failed to write wallet file: {}", temp_path))?;
-        
-        fs::rename(&temp_path, &self.wallet_path)
-            .with_context(|| format!("Failed to rename temp file to wallet file: {}", self.wallet_path.display()))?;
-        
-        debug!("Saved {} wallets to storage", self.wallets.len());
-        Ok(())
-    }
-    
-    /// Thêm ví mới vào lưu trữ
-    pub fn add_wallet(&mut self, wallet: WalletInfo) -> Result<()> {
-        // Kiểm tra ví đã tồn tại chưa
-        if self.wallets.contains_key(&wallet.address.to_lowercase()) {
-            return Err(anyhow!("Wallet with address {} already exists", wallet.address));
-        }
-        
-        // Thêm vào danh sách
-        self.wallets.insert(wallet.address.to_lowercase(), wallet);
-        
-        Ok(())
-    }
-    
-    /// Lấy thông tin ví theo địa chỉ
-    pub fn get_wallet(&self, address: &str) -> Option<&WalletInfo> {
-        self.wallets.get(&address.to_lowercase())
-    }
-    
-    /// Lấy thông tin ví có thể thay đổi
-    pub fn get_wallet_mut(&mut self, address: &str) -> Option<&mut WalletInfo> {
-        self.wallets.get_mut(&address.to_lowercase())
-    }
-    
-    /// Xóa ví khỏi lưu trữ
-    pub fn remove_wallet(&mut self, address: &str) -> Result<()> {
-        if !self.wallets.contains_key(&address.to_lowercase()) {
-            return Err(anyhow!("Wallet with address {} not found", address));
-        }
-        
-        self.wallets.remove(&address.to_lowercase());
-        
-        Ok(())
-    }
-    
-    /// Lấy danh sách tất cả ví
-    pub fn get_all_wallets(&self) -> Vec<SafeWalletView> {
-        self.wallets.values()
-            .map(|w| w.to_safe_view())
-            .collect()
-    }
-    
-    /// Mã hóa private key cho ví
-    pub fn encrypt_private_key(&self, private_key: &str) -> Result<EncryptedData> {
-        let salt = {
-            let mut s = [0u8; 16];
-            OsRng.fill_bytes(&mut s);
-            s.to_vec()
-        };
-        
-        let cipher = Aes256Gcm::new(GenericArray::from_slice(&self.current_key.key));
-        
-        let mut nonce_bytes = [0u8; 12];
-        OsRng.fill_bytes(&mut nonce_bytes);
-        let nonce = GenericArray::from_slice(&nonce_bytes);
-        
-        let ciphertext = cipher.encrypt(nonce, private_key.as_bytes())
-            .map_err(|e| anyhow!("Failed to encrypt private key: {}", e))?;
-            
-        Ok(EncryptedData {
-            ciphertext,
-            nonce: nonce_bytes.to_vec(),
-            salt,
-            version: 1,
-        })
-    }
-    
-    /// Giải mã private key
-    pub fn decrypt_private_key(&self, encrypted: &EncryptedData) -> Result<String> {
-        let cipher = Aes256Gcm::new(GenericArray::from_slice(&self.current_key.key));
-        
-        let nonce = GenericArray::from_slice(&encrypted.nonce);
-        let plaintext = cipher.decrypt(nonce, encrypted.ciphertext.as_ref())
-            .map_err(|e| anyhow!("Failed to decrypt private key: {}", e))?;
-        
-        let private_key = String::from_utf8(plaintext)
-            .map_err(|e| anyhow!("Failed to convert data: {}", e))?;
-        
-        Ok(private_key)
-    }
-    
-    /// Tạo ví từ private key
-    pub fn create_with_private_key(&mut self, 
-                                  private_key: &str, 
-                                  chain_id: u64,
-                                  name: Option<String>) -> Result<WalletInfo> {
-        // Xác thực private key
-        Self::validate_private_key(private_key)?;
-        
-        // Tạo ví từ private key
-        let wallet = LocalWallet::from_str(private_key)
-            .context("Failed to create wallet from private key")?
-            .with_chain_id(chain_id);
-            
-        // Lấy địa chỉ
-        let address = format!("{:?}", wallet.address());
-        
-        // Mã hóa private key
-        let encrypted_private_key = Some(self.encrypt_private_key(private_key)?);
-        
-        // Tạo thông tin ví
-        let wallet_info = WalletInfo {
-            address: address.clone(),
-            encrypted_private_key,
-            encrypted_mnemonic: None,
-            chain_id,
-            created_at: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-            last_used: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-            balance: None,
-            name,
-            tags: Vec::new(),
-            is_hardware: false,
-        };
-        
-        // Thêm vào danh sách
-        self.add_wallet(wallet_info.clone())?;
-        
-        Ok(wallet_info)
-    }
-    
-    /// Chuyển đổi từ WalletInfo sang LocalWallet
-    pub fn to_local_wallet(&self, wallet_info: &WalletInfo) -> Result<LocalWallet> {
-        let encrypted_key = wallet_info.encrypted_private_key.as_ref()
-            .ok_or_else(|| anyhow!("Wallet does not have a private key"))?;
-        
-        let private_key = self.decrypt_private_key(encrypted_key)?;
-        
-        let wallet = LocalWallet::from_str(&private_key)
-            .context("Failed to create wallet from private key")?
-            .with_chain_id(wallet_info.chain_id);
-            
-        Ok(wallet)
-    }
-    
-    /// Thay đổi khóa mã hóa và mã hóa lại tất cả ví
-    pub fn rotate_encryption_key(&mut self, new_password: Option<&str>) -> Result<()> {
-        let new_key = if let Some(password) = new_password {
-            let mut salt = [0u8; 16];
-            OsRng.fill_bytes(&mut salt);
-            Self::generate_encryption_key(password, &salt)?
-        } else {
-            let mut key = [0u8; 32];
-            OsRng.fill_bytes(&mut key);
-            key
-        };
-        
-        // Tạo bản sao tạm thời của self.current_key để tránh borrow conflict
-        let current_key = self.current_key.clone();
-        
-        // Tạo encryption key mới
-        let key_id = format!("key-{}", Self::rand_hex_string(8));
-        let new_key_obj = EncryptionKey {
-            key_id,
-            key: new_key,
-            created_at: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-        };
-        
-        // Mã hóa lại tất cả ví
-        let mut re_encrypted_wallets = HashMap::new();
-        for (address, mut wallet) in self.wallets.iter().map(|(k, v)| (k.clone(), v.clone())) {
-            if let Some(encrypted_key) = &wallet.encrypted_private_key {
-                // Sử dụng bản copy của current_key
-                let cipher = Aes256Gcm::new(GenericArray::from_slice(&current_key.key));
-                let nonce = GenericArray::from_slice(&encrypted_key.nonce);
-                let plaintext = cipher.decrypt(nonce, encrypted_key.ciphertext.as_ref())
-                    .map_err(|e| anyhow!("Failed to decrypt private key: {}", e))?;
-                
-                let private_key = String::from_utf8(plaintext)
-                    .map_err(|e| anyhow!("Failed to convert data: {}", e))?;
-                
-                // Mã hóa lại với khóa mới
-                let salt = {
-                    let mut s = [0u8; 16];
-                    OsRng.fill_bytes(&mut s);
-                    s.to_vec()
-                };
-                
-                let new_cipher = Aes256Gcm::new(GenericArray::from_slice(&new_key_obj.key));
-                
-                let mut nonce_bytes = [0u8; 12];
-                OsRng.fill_bytes(&mut nonce_bytes);
-                let new_nonce = GenericArray::from_slice(&nonce_bytes);
-                
-                let ciphertext = new_cipher.encrypt(new_nonce, private_key.as_bytes())
-                    .map_err(|e| anyhow!("Failed to encrypt private key: {}", e))?;
-                
-                wallet.encrypted_private_key = Some(EncryptedData {
-                    ciphertext,
-                    nonce: nonce_bytes.to_vec(),
-                    salt,
-                    version: 1,
-                });
-            }
-            
-            if let Some(_encrypted_mnemonic) = &wallet.encrypted_mnemonic {
-                // existing code 
-            }
-            
-            re_encrypted_wallets.insert(address, wallet);
-        }
-        
-        // Cập nhật wallets và key
-        self.wallets = re_encrypted_wallets;
-        self.current_key = new_key_obj;
-        
-        // Lưu thay đổi
-        self.save()?;
-        
-        Ok(())
-    }
-    
-    /// Xác thực private key
-    pub fn validate_private_key(private_key: &str) -> Result<()> {
-        let key = private_key.trim_start_matches("0x");
-        
-        if key.len() != 64 {
-            return Err(anyhow!("Invalid private key length. Expected 64 hex characters."));
-        }
-        
-        // Kiểm tra private key có phải dạng hex không
-        if !key.chars().all(|c| c.is_ascii_hexdigit()) {
-            return Err(anyhow!("Private key must contain only hex characters"));
-        }
-        
-        // Kiểm tra xem có thể parse thành LocalWallet không
-        let _ = LocalWallet::from_str(private_key)?;
-        
-        Ok(())
-    }
-    
-    /// Xác thực địa chỉ ví
-    pub fn validate_wallet_address(address: &str) -> Result<()> {
-        if !address.starts_with("0x") {
-            return Err(anyhow!("Address must start with 0x"));
-        }
-        
-        if address.len() != 42 {
-            return Err(anyhow!("Address must be 42 characters long (including 0x)"));
-        }
-        
-        // Kiểm tra địa chỉ có phải dạng hex không
-        if !address[2..].chars().all(|c| c.is_ascii_hexdigit()) {
-            return Err(anyhow!("Address must contain only hex characters"));
-        }
-        
-        // Kiểm tra checksum
-        let address_no_prefix = &address[2..];
-        if address_no_prefix.chars().any(|c| c.is_ascii_alphabetic()) {
-            // Nếu có ký tự chữ, kiểm tra checksum
-            match ethers::types::Address::from_str(address) {
-                Ok(_) => Ok(()),
-                Err(_) => Err(anyhow!("Invalid address checksum")),
-            }
-        } else {
-            // Nếu toàn số, chuyển đổi sang Address
-            match ethers::types::Address::from_str(address) {
-                Ok(_) => Ok(()),
-                Err(_) => Err(anyhow!("Invalid address format")),
-            }
-        }
-    }
-
-    /// Tạo khóa mã hóa từ mật khẩu
-    fn generate_encryption_key(password: &str, salt: &[u8]) -> Result<[u8; 32]> {
-        // Tạo một Argon2 context
-        let argon2 = Argon2::new(
-            Algorithm::Argon2id, 
-            Version::V0x13, 
-            Params::new(4096, 3, 4, Some(32)).unwrap()
-        );
-        
-        // Tạo salt string từ slice
-        let mut random_salt = [0u8; 16];
-        OsRng.fill_bytes(&mut random_salt);
-        
-        // Đảm bảo có một số byte từ salt ban đầu trong random_salt
-        for i in 0..std::cmp::min(salt.len(), 8) {
-            random_salt[i] ^= salt[i];  // XOR để kết hợp giá trị
-        }
-        
-        // Sử dụng từ khóa từ tài liệu của password-hash
-        let salt_str = SaltString::encode_b64(&random_salt)
-            .map_err(|e| anyhow!("Failed to encode salt: {}", e))?;
-        
-        // Hash mật khẩu
-        let hash = argon2
-            .hash_password(password.as_bytes(), &salt_str)
-            .map_err(|e| anyhow!("Failed to hash password: {}", e))?;
-            
-        // Lấy bytes từ hash
-        let hash_wrapped = hash.hash.unwrap();
-        let hash_bytes = hash_wrapped.as_bytes();
-        
-        // Sao chép 32 bytes đầu tiên vào key
-        let mut key = [0u8; 32];
-        key.copy_from_slice(&hash_bytes[0..32]);
-        
-        Ok(key)
-    }
-}
 
 impl WalletInfo {
     /// Tạo view an toàn không chứa dữ liệu nhạy cảm
@@ -622,66 +417,43 @@ impl WalletInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    #[tokio::test]
-    async fn test_wallet_encryption() -> Result<()> {
-        let config = StorageConfig {
-            wallet_dir: ".wallets".to_string(),
-            wallet_filename: "test_wallets.json".to_string(),
-            encryption_salt: "diamond".to_string(),
-        };
-        
-        let storage = SecureWalletStorage::new(&config)?;
-        
-        // Private key từ test
-        let private_key = "0000000000000000000000000000000000000000000000000000000000000001";
-        
-        // Mã hóa và giải mã
-        let encrypted = storage.encrypt_private_key(private_key)?;
-        let decrypted = storage.decrypt_private_key(&encrypted)?;
-        
-        assert_eq!(private_key, decrypted);
-        
-        // Xóa file test nếu tồn tại
-        let path = Path::new("test_wallets.json");
-        if path.exists() {
-            fs::remove_file(path)?;
-        }
-        
-        Ok(())
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_secure_storage_store_load() {
+        let temp_dir = tempdir().unwrap();
+        let config = StorageConfig::default();
+        let storage = SecureWalletStorage::new(temp_dir.path().to_path_buf(), &config).unwrap();
+
+        let identifier = "test_wallet";
+        let data = b"sensitive wallet data";
+        let password = "secure_password";
+
+        // Store data
+        storage.store_wallet( &WalletInfo{ address: identifier.to_string(), encrypted_private_key: None, encrypted_mnemonic: None, chain_id: 1, created_at: 1, last_used: 1, balance: None, name: None, tags: vec![], is_hardware: false}, password).unwrap();
+
+        // Verify it exists
+        assert!(storage.exists(identifier));
+
+        // Load data
+        let loaded_data = storage.load_wallet(identifier, password).unwrap();
+        assert_eq!(loaded_data.address, identifier.to_string());
+
+
+        // Delete data
+        storage.delete_wallet(identifier).unwrap();
+        assert!(!storage.exists(identifier));
     }
-    
-    #[tokio::test]
-    async fn test_create_wallet() -> Result<()> {
-        let config = StorageConfig {
-            wallet_dir: ".wallets".to_string(),
-            wallet_filename: "test_wallets2.json".to_string(),
-            encryption_salt: "diamond".to_string(),
-        };
-        
-        let mut storage = SecureWalletStorage::new(&config)?;
-        
-        // Private key từ test (không dùng trong thực tế)
-        let private_key = "0000000000000000000000000000000000000000000000000000000000000001";
-        
-        // Tạo ví mới
-        let wallet_info = storage.create_with_private_key(private_key, 1, Some("Test Wallet".to_string()))?;
-        
-        // Kiểm tra ví đã được thêm
-        assert!(storage.get_wallet(&wallet_info.address).is_some());
-        
-        // Chuyển đổi sang LocalWallet
-        let local_wallet = storage.to_local_wallet(&wallet_info)?;
-        
-        // Kiểm tra địa chỉ
-        assert_eq!(format!("{:?}", local_wallet.address()), wallet_info.address);
-        
-        // Xóa file test nếu tồn tại
-        let path = Path::new("test_wallets2.json");
-        if path.exists() {
-            fs::remove_file(path)?;
-        }
-        
-        Ok(())
+
+    #[test]
+    fn test_cache_entry() {
+        let value = "test_value";
+        // Create with negative TTL to ensure it's already expired
+        let entry = CacheEntry::new(value, -1);
+        assert!(entry.is_expired());
+
+        // Create with future TTL
+        let entry = CacheEntry::new(value, 3600);
+        assert!(!entry.is_expired());
     }
-} 
+}
