@@ -8,20 +8,25 @@ use std::{
 };
 
 // Internal imports
-use crate::chain_adapters::{
-    interfaces::ChainError,
-    retry_policy::{RetryPolicy, RetryPolicyEnum},
+use crate::{
+    chain_adapters::{
+        interfaces::ChainError,
+        retry_policy::{RetryPolicy, RetryPolicyEnum},
+    },
 };
+
+use common::cache::{Cache, CacheEntry, JSONCache, BasicCache};
 
 // Third party imports
 use anyhow::{Result, anyhow};
 use tracing::{info, warn, debug};
-use ethers::providers::{Middleware, Provider};
+use ethers::providers::{Middleware, Provider, Http};
 use serde::{Serialize, Deserialize};
 use metrics::{counter, gauge};
 use tokio::sync::Semaphore;
 use serde_json;
-use crate::cache::{Cache, JSONCache, Cacheable};
+use async_trait::async_trait;
+use std::time::Instant;
 
 /// Trạng thái của một RPC endpoint
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -189,19 +194,26 @@ pub struct RPCConnectionPool {
     cache: JSONCache,
 }
 
-impl Cacheable for RPCConnectionPool {
-    type Value = serde_json::Value;
-
-    fn get_from_cache(&self, key: &str) -> Option<Self::Value> {
-        self.cache.get(key)
+#[async_trait]
+impl Cache for RPCConnectionPool {
+    async fn get_from_cache<T: Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static>(&self, key: &str) -> Result<Option<T>> {
+        self.cache.get_from_cache(key).await
     }
 
-    fn store_in_cache(&self, key: &str, value: &Self::Value, ttl_seconds: u64) -> Result<()> {
-        self.cache.set(key, value.clone(), ttl_seconds)
+    async fn store_in_cache<T: Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static>(&self, key: &str, value: T, ttl_seconds: u64) -> Result<()> {
+        self.cache.store_in_cache(key, value, ttl_seconds).await
     }
 
-    fn cleanup_cache(&self) {
-        self.cache.cleanup()
+    async fn remove(&self, key: &str) -> Result<()> {
+        self.cache.remove(key).await
+    }
+
+    async fn clear(&self) -> Result<()> {
+        self.cache.clear().await
+    }
+
+    async fn cleanup_cache(&self) -> Result<()> {
+        self.cache.cleanup_cache().await
     }
 }
 

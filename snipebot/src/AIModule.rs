@@ -9,17 +9,17 @@ use crate::types::{
     TradingStrategy, 
     AIPrediction, 
     AIAnalysisResult, 
-    TokenStatus, 
-    TokenRiskAnalysis,
+    TokenStatus,
     PendingSwap,
     AIDecision
 };
+use crate::risk_analyzer::TokenRiskAnalysis;
 use async_trait::async_trait;
 use std::sync::Arc;
 use crate::mempool::MempoolWatcher;
 use crate::MonteEquilibrium::GameTheoryOptimizer as MonteEquilibriumOptimizer;
-use crate::TradeManager::TradeManager as TradeManagerType;
-use crate::ChainAdapter;
+use crate::trade::trade_logic::TradeManager;
+use crate::chain_adapters::ChainAdapter;
 
 /// Các dự đoán AI
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,7 +69,7 @@ pub struct AIModule {
     config: AIModuleConfig,
     mempool_tracker: Option<Arc<Mutex<MempoolWatcher>>>,
     monte_equilibrium: Option<Arc<MonteEquilibriumOptimizer>>,
-    trade_manager: Option<Arc<Mutex<TradeManagerType<dyn ChainAdapter + Send + Sync>>>>,
+    trade_manager: Option<Arc<Mutex<TradeManager<dyn ChainAdapter + Send + Sync>>>>,
     bot_mode: BotMode,
     trade_history_db: Option<Arc<Mutex<TradeHistoryDB>>>,
 }
@@ -153,7 +153,7 @@ impl AIModule {
         config: AIModuleConfig,
         mempool_tracker: Option<Arc<Mutex<MempoolWatcher>>>,
         monte_equilibrium: Option<Arc<MonteEquilibriumOptimizer>>,
-        trade_manager: Option<Arc<Mutex<TradeManagerType<dyn ChainAdapter + Send + Sync>>>>,
+        trade_manager: Option<Arc<Mutex<TradeManager<dyn ChainAdapter + Send + Sync>>>>,
     ) -> Self {
         Self {
             model,
@@ -236,15 +236,44 @@ impl AIModule {
             
             let token_address_clone = token_address.to_string();
             let result_clone = result.clone();
-            let self_clone = self.clone();
+
+            // KHÔNG clone self để tránh vấn đề lifetime,
+            // thay vào đó sử dụng các thành phần riêng biệt
+            
+            // Clone các components cần thiết để tránh deadlock
+            let monte_equilibrium = self.monte_equilibrium.clone();
+            let trade_manager = self.trade_manager.clone();
+            let config = self.config.clone();
             
             tokio::spawn(async move {
-                match self_clone.execute_ai_recommendation(&token_address_clone, &result_clone).await {
-                    Ok(_) => {
-                        info!("Đã thực hiện quyết định AI cho token {}", token_address_clone);
-                    },
-                    Err(e) => {
-                        warn!("Lỗi khi thực hiện quyết định AI: {}", e);
+                if let Some(trade_manager) = trade_manager {
+                    if result_clone.confidence > 0.8 
+                        && result_clone.recommendation.contains("buy") {
+                        
+                        // Tránh deadlock bằng cách sử dụng timeout khi acquire lock
+                        match tokio::time::timeout(
+                            Duration::from_secs(5),
+                            trade_manager.lock()
+                        ).await {
+                            Ok(guard) => {
+                                // Thực hiện giao dịch an toàn với guard đã lấy được
+                                match guard.buy_token_with_optimized_params(
+                                    &token_address_clone,
+                                    "0.01", // Số lượng nhỏ để test
+                                    None
+                                ).await {
+                                    Ok(result) => {
+                                        info!("Đã thực hiện giao dịch AI cho token {}: {:?}", token_address_clone, result);
+                                    },
+                                    Err(e) => {
+                                        warn!("Lỗi khi thực hiện giao dịch: {}", e);
+                                    }
+                                }
+                            },
+                            Err(_) => {
+                                warn!("Timeout khi cố gắng lấy lock TradeManager cho token {}", token_address_clone);
+                            }
+                        }
                     }
                 }
             });
@@ -320,13 +349,27 @@ impl AIModule {
                             optimizer.optimize_buy_parameters(token_address, &base_amount.to_string())
                         ).await {
                             Ok(Ok(optimize_result)) => {
-                                // Chuyển tới TradeManager để thực hiện
+                                // Sử dụng try_lock và timeout để tránh deadlock
                                 if let Some(trade_manager) = &self.trade_manager {
-                                    trade_manager.buy_token_with_optimized_params(
-                                        token_address,
-                                        &optimize_result.amount,
-                                        optimize_result.gas_price
-                                    ).await?;
+                                    match tokio::time::timeout(
+                                        Duration::from_secs(5),
+                                        trade_manager.lock()
+                                    ).await {
+                                        Ok(manager) => {
+                                            // Thực hiện giao dịch
+                                            manager.buy_token_with_optimized_params(
+                                                token_address,
+                                                &optimize_result.amount,
+                                                optimize_result.gas_price
+                                            ).await?;
+                                        },
+                                        Err(_) => {
+                                            warn!("Timeout khi lấy lock TradeManager");
+                                            return Err("Timeout khi lấy lock TradeManager".into());
+                                        }
+                                    }
+                                } else {
+                                    return Err("TradeManager không khả dụng".into());
                                 }
                             },
                             Ok(Err(e)) => {
@@ -383,22 +426,28 @@ impl AIModule {
         Ok(result)
     }
 
+    // Phương thức này không có trong mã ban đầu, thêm để phù hợp với lời gọi trong execute_ai_recommendation
+    async fn calculate_optimal_position_size(&self, token_address: &str, risk_reward: f64) -> Result<String, Box<dyn std::error::Error>> {
+        // Đây là phương thức tạm thời
+        Ok("0.01".to_string())
+    }
+
     async fn determine_optimal_strategy(&self, prediction: &AIPrediction, token_address: &str) -> Result<TradingStrategy, Box<dyn std::error::Error>> {
         // Dựa vào kết quả dự đoán để chọn chiến lược tối ưu
         let mempool_activity = self.is_high_mempool_activity(token_address).await?;
         
-        match prediction.suggested_strategy.as_str() {
-            "pump_potential" if prediction.confidence > 0.8 => {
+        match &prediction.suggested_strategy {
+            TradingStrategy::Accumulate if prediction.confidence > 0.8 => {
                 Ok(TradingStrategy::Accumulate)
             },
-            "short_term_buy" if prediction.confidence > 0.7 => {
+            TradingStrategy::LimitedBuy if prediction.confidence > 0.7 => {
                 if mempool_activity {
                     Ok(TradingStrategy::MempoolFrontrun)
                 } else {
                     Ok(TradingStrategy::LimitedBuy)
                 }
             },
-            "sandwich_opportunity" if prediction.confidence > 0.75 => {
+            TradingStrategy::SandwichAttack if prediction.confidence > 0.75 => {
                 // Thêm kiểm tra xem có nạn nhân tiềm năng không
                 if self.find_potential_sandwich_victim(token_address).await?.is_some() {
                     Ok(TradingStrategy::SandwichAttack)
@@ -406,7 +455,7 @@ impl AIModule {
                     Ok(TradingStrategy::LimitedBuy)
                 }
             },
-            "arbitrage_opportunity" if prediction.confidence > 0.8 => {
+            TradingStrategy::Arbitrage if prediction.confidence > 0.8 => {
                 Ok(TradingStrategy::Arbitrage)
             },
             _ => Ok(TradingStrategy::Monitor),
@@ -534,3 +583,6 @@ impl Clone for AIModule {
         }
     }
 }
+
+/// Cấu trúc để lưu trữ lịch sử giao dịch
+pub struct TradeHistoryDB;

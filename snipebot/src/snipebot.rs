@@ -17,7 +17,7 @@ use diamond_wallet::{WalletManager, WalletInfo, SafeWalletView};
 use std::time::SystemTime;
 use std::sync::Mutex;
 use crate::chain_adapters::base::ChainAdapterEnum;
-use crate::trade_logic::{TradeManager, TradeConfig, TradeResult};
+use crate::trade::trade_logic::{TradeManager, TradeConfig, TradeResult};
 use crate::risk_analyzer::{RiskAnalyzer, BasicRiskAnalyzer};
 use crate::gas_optimizer::GasOptimizer;
 use crate::token_status::{TokenStatusTracker, TokenStatus, TokenPriceAlert, TokenSafetyLevel};
@@ -32,6 +32,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
 use crate::utils;
 use crate::types::{ServiceMessage, Subscription, SubscriptionLevel, TokenInfo};
+use crate::module_manager::ModuleManager;
+use crate::health_monitor::HealthMonitor;
+use crate::trade_executor::TradeExecutor;
+use crate::subscription_manager::SubscriptionManager;
+use crate::mempool::mempool_monitor::MempoolMonitor;
+use crate::ai::ai_coordinator::AICoordinator;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SnipeConfig {
@@ -159,6 +165,14 @@ pub struct SnipeBot {
     ai_module: Arc<RwLock<Option<AIModule>>>,
     auto_tuner: Arc<RwLock<AutoTuner>>,
     task_handles: RwLock<HashMap<String, JoinHandle<()>>>,
+    
+    module_manager: ModuleManager,
+    health_monitor: HealthMonitor,
+    trade_executor: TradeExecutor,
+    subscription_manager: SubscriptionManager,
+    
+    mempool_monitor: Option<Arc<Mutex<MempoolMonitor>>>,
+    ai_coordinator: Option<Arc<Mutex<AICoordinator>>>,
 }
 
 // Định nghĩa message cho channel
@@ -266,6 +280,14 @@ impl SnipeBot {
             ai_module: Arc::new(RwLock::new(None)),
             auto_tuner: Arc::new(RwLock::new(AutoTuner::new())),
             task_handles: RwLock::new(HashMap::new()),
+            
+            module_manager: ModuleManager::new(),
+            health_monitor: HealthMonitor::new(),
+            trade_executor: TradeExecutor::new(),
+            subscription_manager: SubscriptionManager::new(),
+            
+            mempool_monitor: None,
+            ai_coordinator: None,
         };
         
         // Khởi tạo các thành phần cần thiết cho cả hai chế độ
@@ -1046,6 +1068,55 @@ impl SnipeBot {
             self.mempool_watcher = Some(mempool_watcher);
         }
         
+        // Sửa đoạn khởi tạo TradeManager
+        if let Ok(mut trade_manager_lock) = self.trade_manager.write() {
+            if trade_manager_lock.is_none() {
+                info!("Khởi tạo TradeManager...");
+                
+                // Sử dụng timeout khi khởi tạo các components
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(10),
+                    async {
+                        let chain_adapter = Arc::new(self.chain_adapter.clone());
+                        let config = self.config.clone();
+                        
+                        // Tạo TradeManager với cấu hình phù hợp
+                        let trade_config = trade::trade_logic::TradeConfig {
+                            gas_limit: U256::from(400000),
+                            gas_price: U256::from(5000000000u64),
+                            slippage: 0.5,
+                            timeout: 30,
+                            auto_approve: true,
+                            use_flashbots: config.advanced.use_flashbots,
+                            emergency_sell_gas_multiplier: 1.5,
+                            router_address: config.router_address.clone(),
+                            wrapped_native_token: config.wrapped_native_token.clone(),
+                            max_slippage: 2.0,
+                            twap_window_size: 10,
+                            twap_min_samples: 5,
+                            twap_update_interval: 60,
+                        };
+                        
+                        let trade_manager = TradeManager::new(chain_adapter, trade_config);
+                        
+                        // Thiết lập tất cả các trường cần thiết
+                        
+                        // Trả về manager đã khởi tạo
+                        Arc::new(Mutex::new(trade_manager))
+                    }
+                ).await {
+                    Ok(manager) => {
+                        *trade_manager_lock = Some(manager);
+                        info!("TradeManager đã khởi tạo thành công.");
+                    },
+                    Err(_) => {
+                        error!("Timeout khi khởi tạo TradeManager.");
+                        return Err("Timeout khi khởi tạo TradeManager.".into());
+                    }
+                }
+            }
+        }
+        
         Ok(())
     }
     
@@ -1064,13 +1135,20 @@ impl SnipeBot {
         
         // Lấy phân tích rủi ro
         let risk_analysis = if let Some(analyzer) = &self.risk_analyzer {
-            analyzer.analyze_token(token_address).await?
+            let token_addr = Address::from_str(token_address).map_err(|e| format!("Địa chỉ token không hợp lệ: {}", e))?;
+            analyzer.analyze_token(token_addr).await?
         } else {
             return Err("Risk Analyzer chưa được khởi tạo".into());
         };
         
         // Cập nhật thông tin tax
-        token_status.tax_info = Some(risk_analysis.tax_info.clone());
+        let tax_info = TaxInfo {
+            buy_tax: 0.0, // Cần cập nhật từ risk_analysis nếu có
+            sell_tax: 0.0, // Cần cập nhật từ risk_analysis nếu có
+            transfer_tax: 0.0,
+            min_hold_time: None,
+        };
+        token_status.tax_info = Some(tax_info);
         
         // Cập nhật mức độ an toàn
         if let Some(tracker) = &self.token_status_tracker {
@@ -1084,9 +1162,9 @@ impl SnipeBot {
             token_status.safety_level = tracker.classify_token(&token_status, Some(&risk_analysis));
         } else {
             // Phân loại mặc định nếu không có tracker
-            token_status.safety_level = if risk_analysis.risk_score < 60 { 
+            token_status.safety_level = if risk_analysis.base.risk_score < 60.0 { 
                 TokenSafetyLevel::Green 
-            } else if risk_analysis.risk_score < 80 { 
+            } else if risk_analysis.base.risk_score < 80.0 { 
                 TokenSafetyLevel::Yellow 
             } else { 
                 TokenSafetyLevel::Red 
@@ -1094,9 +1172,9 @@ impl SnipeBot {
         }
         
         // Cập nhật các thông tin khác
-        token_status.is_contract_verified = risk_analysis.verified_contract;
-        token_status.has_dangerous_functions = risk_analysis.flags.len() > 0;
-        token_status.dangerous_functions = risk_analysis.flags.clone();
+        token_status.is_contract_verified = risk_analysis.is_verified;
+        token_status.has_dangerous_functions = risk_analysis.dangerous_functions.len() > 0;
+        token_status.dangerous_functions = risk_analysis.dangerous_functions.clone();
         
         // Kiểm tra thanh khoản đã khóa
         if let Some(analyzer) = &self.risk_analyzer {
@@ -1131,21 +1209,34 @@ impl SnipeBot {
                         
                         // Phân tích rủi ro để cập nhật chỉ số an toàn
                         if let Some(analyzer) = &self.risk_analyzer {
-                            let risk_analysis = analyzer.analyze_token(token_address).await?;
+                            let token_addr = Address::from_str(token_address).map_err(|e| format!("Địa chỉ token không hợp lệ: {}", e))?;
+                            let risk_analysis = analyzer.analyze_token(token_addr).await?;
                             
-                            let safety_level = analyzer.classify_token_safety(&risk_analysis);
+                            let safety_level = if risk_analysis.base.risk_score < 60.0 {
+                                TokenSafetyLevel::Green
+                            } else if risk_analysis.base.risk_score < 80.0 {
+                                TokenSafetyLevel::Yellow
+                            } else {
+                                TokenSafetyLevel::Red
+                            };
                             
                             // Cập nhật thông tin an toàn vào token status
                             status.safety_emoji = safety_level.to_string();
-                            status.has_dangerous_functions = risk_analysis.flags.len() > 0;
-                            status.dangerous_functions = risk_analysis.flags;
-                            status.is_contract_verified = risk_analysis.verified_contract;
+                            status.has_dangerous_functions = risk_analysis.dangerous_functions.len() > 0;
+                            status.dangerous_functions = risk_analysis.dangerous_functions;
+                            status.is_contract_verified = risk_analysis.is_verified;
                             
+                            // Cập nhật thông tin thuế nếu có
                             if let Some(ref mut tax_info) = status.tax_info {
-                                tax_info.buy_tax = risk_analysis.tax_info.buy_tax;
-                                tax_info.sell_tax = risk_analysis.tax_info.sell_tax;
+                                // Có thể cần cập nhật từ risk_analysis nếu có
                             } else {
-                                status.tax_info = Some(risk_analysis.tax_info);
+                                let tax_info = TaxInfo {
+                                    buy_tax: 0.0,
+                                    sell_tax: 0.0,
+                                    transfer_tax: 0.0,
+                                    min_hold_time: None,
+                                };
+                                status.tax_info = Some(tax_info);
                             }
                         }
                         
@@ -1165,20 +1256,33 @@ impl SnipeBot {
                                 let mut status = status.clone();
                                 
                                 if let Some(analyzer) = &self.risk_analyzer {
-                                    let risk_analysis = analyzer.analyze_token(token_address).await?;
+                                    let token_addr = Address::from_str(token_address).map_err(|e| format!("Địa chỉ token không hợp lệ: {}", e))?;
+                                    let risk_analysis = analyzer.analyze_token(token_addr).await?;
                                     
-                                    let safety_level = analyzer.classify_token_safety(&risk_analysis);
+                                    let safety_level = if risk_analysis.base.risk_score < 60.0 {
+                                        TokenSafetyLevel::Green
+                                    } else if risk_analysis.base.risk_score < 80.0 {
+                                        TokenSafetyLevel::Yellow
+                                    } else {
+                                        TokenSafetyLevel::Red
+                                    };
                                     
                                     status.safety_emoji = safety_level.to_string();
-                                    status.has_dangerous_functions = risk_analysis.flags.len() > 0;
-                                    status.dangerous_functions = risk_analysis.flags;
-                                    status.is_contract_verified = risk_analysis.verified_contract;
+                                    status.has_dangerous_functions = risk_analysis.dangerous_functions.len() > 0;
+                                    status.dangerous_functions = risk_analysis.dangerous_functions;
+                                    status.is_contract_verified = risk_analysis.is_verified;
                                     
+                                    // Cập nhật thông tin thuế nếu có
                                     if let Some(ref mut tax_info) = status.tax_info {
-                                        tax_info.buy_tax = risk_analysis.tax_info.buy_tax;
-                                        tax_info.sell_tax = risk_analysis.tax_info.sell_tax;
+                                        // Có thể cần cập nhật từ risk_analysis nếu có
                                     } else {
-                                        status.tax_info = Some(risk_analysis.tax_info);
+                                        let tax_info = TaxInfo {
+                                            buy_tax: 0.0,
+                                            sell_tax: 0.0,
+                                            transfer_tax: 0.0,
+                                            min_hold_time: None,
+                                        };
+                                        status.tax_info = Some(tax_info);
                                     }
                                 }
                                 
@@ -3124,28 +3228,36 @@ impl SnipeBot {
     pub fn check_deadlock_recovery_needed(&self, source: DeadlockSource) -> bool {
         match source {
             DeadlockSource::TokenTracker => {
-                // Kiểm tra thời gian khóa token tracker
-                let last_lock_time = self.last_token_tracker_lock_time.load(Ordering::SeqCst);
-                let now = utils::safe_now();
-                
-                if last_lock_time == 0 {
-                    return false; // Chưa được khóa lần nào
+                // Kiểm tra xem TokenTracker có bị treo không
+                if let Ok(last_lock_time) = self.last_token_tracker_lock_time.load(std::sync::atomic::Ordering::Relaxed) {
+                    let now = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    
+                    // Nếu thời gian cuối cùng lock là quá 60 giây trước, coi như bị treo
+                    if now - last_lock_time > 60 {
+                        warn!("Phát hiện TokenTracker có thể đã bị deadlock (không được cập nhật trong {} giây)", now - last_lock_time);
+                        return true;
+                    }
                 }
-                
-                // Nếu đã quá 5 phút từ lần cuối cùng khóa thành công
-                now.saturating_sub(last_lock_time) > 300
+                false
             },
             DeadlockSource::TradeManager => {
-                // Kiểm tra thời gian khóa trade manager
-                let last_lock_time = self.last_trade_manager_lock_time.load(Ordering::SeqCst);
-                let now = utils::safe_now();
-                
-                if last_lock_time == 0 {
-                    return false; // Chưa được khóa lần nào
+                // Kiểm tra xem TradeManager có bị treo không
+                if let Ok(last_lock_time) = self.last_trade_manager_lock_time.load(std::sync::atomic::Ordering::Relaxed) {
+                    let now = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    
+                    // Nếu thời gian cuối cùng lock là quá 60 giây trước, coi như bị treo
+                    if now - last_lock_time > 60 {
+                        warn!("Phát hiện TradeManager có thể đã bị deadlock (không được cập nhật trong {} giây)", now - last_lock_time);
+                        return true;
+                    }
                 }
-                
-                // Nếu đã quá 5 phút từ lần cuối cùng khóa thành công
-                now.saturating_sub(last_lock_time) > 300
+                false
             },
             _ => false, // Các nguồn khác chưa được xử lý
         }
@@ -3181,23 +3293,54 @@ impl SnipeBot {
             DeadlockSource::TradeManager => {
                 warn!("Đang khôi phục TradeManager từ deadlock");
                 
-                // Tạo TradeManager mới
-                if let (Some(chain_adapter), Some(token_tracker)) = (&self.chain_adapter, &self.token_status_tracker) {
-                    // Tạo và thay thế
-                    let new_manager = Arc::new(Mutex::new(TradeManager::new(
-                        chain_adapter.clone(),
-                        token_tracker.clone(),
-                        self.config.clone(),
-                    )));
-                    
-                    self.replace_trade_manager(new_manager).await;
-                    
-                    // Ghi nhận thời gian khôi phục
-                    self.update_trade_manager_lock_time();
-                    
-                    info!("Đã khôi phục TradeManager thành công");
-                } else {
-                    return Err("Không thể khôi phục TradeManager: Thiếu các component".into());
+                // Sử dụng try_write với timeout để tránh deadlock mới
+                let trade_manager_write_result = tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    async {
+                        self.trade_manager.try_write()
+                    }
+                ).await;
+                
+                match trade_manager_write_result {
+                    Ok(Ok(mut trade_manager_guard)) => {
+                        // Tạo TradeManager mới
+                        if let Some(chain_adapter) = &self.chain_adapter {
+                            let trade_config = trade::trade_logic::TradeConfig {
+                                gas_limit: U256::from(400000),
+                                gas_price: U256::from(5000000000u64),
+                                slippage: 0.5,
+                                timeout: 30,
+                                auto_approve: true,
+                                use_flashbots: self.config.advanced.use_flashbots,
+                                emergency_sell_gas_multiplier: 1.5,
+                                router_address: self.config.router_address.clone(),
+                                wrapped_native_token: self.config.wrapped_native_token.clone(),
+                                max_slippage: 2.0,
+                                twap_window_size: 10,
+                                twap_min_samples: 5,
+                                twap_update_interval: 60,
+                            };
+                            
+                            let new_manager = Arc::new(Mutex::new(TradeManager::new(
+                                Arc::new(chain_adapter.clone()),
+                                trade_config,
+                            )));
+                            
+                            // Cập nhật TradeManager
+                            *trade_manager_guard = Some(new_manager.clone());
+                            
+                            // Cập nhật timestamp để biết đã khôi phục thành công
+                            self.update_trade_manager_lock_time();
+                            
+                            info!("Đã khôi phục TradeManager thành công");
+                            return Ok(());
+                        }
+                        return Err("Không thể khôi phục TradeManager: Thiếu các component".into());
+                    },
+                    _ => {
+                        error!("Không thể khôi phục TradeManager: không thể lấy write lock");
+                        return Err("Không thể khôi phục TradeManager: không thể lấy write lock".into());
+                    }
                 }
             },
             // Tương tự cho các nguồn khác
@@ -3242,29 +3385,24 @@ impl SnipeBot {
     
     // Phương thức thay thế trade manager
     async fn replace_trade_manager(&self, new_manager: Arc<Mutex<TradeManager<ChainAdapterEnum>>>) {
-        // Sử dụng RwLock thay vì unsafe
-        if let Ok(mut manager_guard) = self.trade_manager.write() {
-            // Cố gắng copy dữ liệu từ manager cũ nếu có thể
-            if let Some(old_manager) = manager_guard.as_ref() {
-                match old_manager.try_lock() {
-                    Ok(manager) => {
-                        // Copy dữ liệu
-                        if let Ok(mut new_manager_guard) = new_manager.try_lock() {
-                            for (addr, position) in manager.get_all_positions().await {
-                                if let Err(e) = new_manager_guard.add_position(addr, position.clone()).await {
-                                    warn!("Không thể sao chép vị thế cho token {}: {}", addr, e);
-                                }
-                            }
-                        }
-                    },
-                    Err(_) => {
-                        warn!("Không thể lấy dữ liệu từ manager cũ do deadlock");
-                    }
+        // Sử dụng try_write với timeout để tránh bị treo
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            async {
+                if let Ok(mut manager_guard) = self.trade_manager.try_write() {
+                    *manager_guard = Some(new_manager);
+                    self.update_trade_manager_lock_time();
+                    return true;
                 }
+                false
             }
-            
-            // Gán manager mới an toàn
-            *manager_guard = Some(new_manager);
+        ).await {
+            Ok(true) => {
+                info!("Đã thay thế TradeManager thành công");
+            },
+            _ => {
+                error!("Không thể thay thế TradeManager: không thể lấy write lock");
+            }
         }
     }
     

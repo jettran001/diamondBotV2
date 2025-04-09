@@ -1,41 +1,54 @@
 // Standard library imports
 use std::sync::Arc;
+use std::time::Duration;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::sync::{Mutex, RwLock};
+use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
+use std::collections::VecDeque;
 
 // Third party imports
-use anyhow::Result;
-use tracing::{info, warn, error};
+use anyhow::{Result, anyhow};
+use async_trait::async_trait;
+use ethers::providers::{Provider, Http, Middleware};
+use ethers::types::U64;
+use lazy_static::lazy_static;
+use log::{info, warn};
+use serde::{Serialize, Deserialize};
+use tokio::time::sleep;
+use tracing::{error};
 
 // Internal imports
 use crate::chain_adapters::ChainAdapter;
 use crate::gas_optimizer::GasOptimizer;
-use crate::mempool::MempoolWatcher;
+use crate::mempool::{MempoolWatcher, MempoolTracker, PendingSwap, SandwichResult};
 use crate::token_status::TokenStatusTracker;
 use crate::utils::RetryConfig;
 use crate::metrics::RETRY_METRICS;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
-use tokio::time::sleep;
-use log::{info, warn};
-use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
-use std::time::{SystemTime, UNIX_EPOCH};
-use anyhow::{Result, anyhow};
-use crate::mempool::MempoolTracker;
 use crate::MonteEquilibrium::MonteCarloSimulator;
 use crate::types::SandwichPreferredParams;
-use ethers::providers::{Provider, Http, Middleware};
-use ethers::types::U64;
-use lazy_static::lazy_static;
-use crate::trade_logic::TradeResult;
-use crate::mempool::PendingSwap;
-use crate::mempool::SandwichResult;
-use std::collections::VecDeque;
-use async_trait::async_trait;
-use crate::trade_logic::TradeType;
+use crate::trade_logic::{TradeResult, TradeType};
 
 // Theo dõi thời gian trung bình để hoàn thành block
 static AVG_BLOCK_TIME_MS: AtomicU64 = AtomicU64::new(12000); // Mặc định 12s cho Ethereum
 static NETWORK_CONGESTION_LEVEL: AtomicU64 = AtomicU64::new(1); // 1-10, 1=thấp, 10=cao
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoTuningConfig {
+    pub enabled: bool,
+    pub update_interval: Duration,
+    pub max_adjustment: f64,
+    pub min_adjustment: f64,
+    pub learning_rate: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoTuningStats {
+    pub total_adjustments: u64,
+    pub successful_adjustments: u64,
+    pub failed_adjustments: u64,
+    pub average_performance: f64,
+    pub timestamp: u64,
+}
 
 pub struct AutoTuner {
     provider: Provider<Http>,
@@ -50,6 +63,8 @@ pub struct AutoTuner {
     mempool_tracker: Option<Arc<Mutex<MempoolTracker>>>,
     monte_equilibrium: Option<Arc<Mutex<MonteCarloSimulator>>>,
     runtime_retry_config: Arc<RwLock<RetryConfig>>,
+    tuning_config: AutoTuningConfig,
+    tuning_stats: AutoTuningStats,
 }
 
 // Định nghĩa trait AIAnalyzer
@@ -80,6 +95,33 @@ impl Default for AutoTunerConfig {
     }
 }
 
+impl Default for AutoTuningConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            update_interval: Duration::from_secs(3600), // 1 giờ
+            max_adjustment: 0.2, // Điều chỉnh tối đa 20%
+            min_adjustment: 0.01, // Điều chỉnh tối thiểu 1%
+            learning_rate: 0.05, // Tốc độ học 5%
+        }
+    }
+}
+
+impl Default for AutoTuningStats {
+    fn default() -> Self {
+        Self {
+            total_adjustments: 0,
+            successful_adjustments: 0,
+            failed_adjustments: 0,
+            average_performance: 0.0,
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        }
+    }
+}
+
 impl AutoTuner {
     pub fn new(provider: Provider<Http>) -> Self {
         // Tạo cấu hình retry mặc định
@@ -98,6 +140,8 @@ impl AutoTuner {
             mempool_tracker: None,
             monte_equilibrium: None,
             runtime_retry_config: Arc::new(RwLock::new(default_retry_config)),
+            tuning_config: AutoTuningConfig::default(),
+            tuning_stats: AutoTuningStats::default(),
         }
     }
     
@@ -113,6 +157,13 @@ impl AutoTuner {
                 // Không cần truyền network_conditions vào adjust_retry_config vì phương thức này không cần tham số
                 self.adjust_retry_config().await;
                 self.last_check = Instant::now();
+                
+                // Thực hiện auto-tuning nếu được bật
+                if self.tuning_config.enabled {
+                    if let Err(e) = self.analyze_and_adjust().await {
+                        error!("Lỗi khi thực hiện auto-tuning: {}", e);
+                    }
+                }
             }
         }
     }
@@ -301,36 +352,151 @@ impl AutoTuner {
         Ok(())
     }
 
-    async fn analyze_and_adjust(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        // Phân tích hiệu suất giao dịch gần đây
-        let performance_metrics = self.analyze_trade_performance().await?;
+    // Phương thức để phân tích và điều chỉnh tự động các tham số
+    pub async fn analyze_and_adjust(&mut self) -> Result<()> {
+        // Lấy thời gian hiện tại để so sánh với lần cập nhật cuối
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
         
-        // Kiểm tra điều kiện mạng hiện tại
-        let network_conditions = self.check_network_conditions().await;
+        // Kiểm tra xem đã đến thời gian cập nhật chưa
+        let last_update = self.tuning_stats.timestamp;
+        if current_time - last_update < self.tuning_config.update_interval.as_secs() {
+            return Ok(());
+        }
         
-        // Điều chỉnh các tham số dựa trên phân tích
-        self.adjust_gas_strategy(&performance_metrics, &network_conditions).await?;
-        self.adjust_slippage_strategy(&performance_metrics).await?;
-        self.adjust_position_size_strategy(&performance_metrics).await?;
-        self.adjust_retry_config().await;
+        // Phân tích hiệu suất hiện tại
+        let current_performance = self.analyze_current_performance().await?;
         
-        // Điều chỉnh ngưỡng AI
-        if performance_metrics.ai_accuracy < self.config.min_ai_accuracy {
-            if let Some(ai_module) = &self.ai_module {
-                let mut ai = ai_module.lock().unwrap();
-                
-                // Tăng ngưỡng tin cậy nếu độ chính xác thấp
-                let new_threshold = (ai.get_confidence_threshold().await + 0.05).min(0.95);
-                ai.set_confidence_threshold(new_threshold).await?;
-                
-                info!("Điều chỉnh ngưỡng tin cậy AI: {:.2}", new_threshold);
+        // Điều chỉnh các tham số dựa trên hiệu suất
+        let success = self.adjust_parameters(current_performance).await?;
+        
+        // Cập nhật thống kê
+        self.tuning_stats.total_adjustments += 1;
+        if success {
+            self.tuning_stats.successful_adjustments += 1;
+        } else {
+            self.tuning_stats.failed_adjustments += 1;
+        }
+        
+        // Cập nhật hiệu suất trung bình
+        self.tuning_stats.average_performance = (self.tuning_stats.average_performance * (self.tuning_stats.total_adjustments - 1) as f64 
+            + current_performance) / self.tuning_stats.total_adjustments as f64;
+        
+        // Cập nhật timestamp
+        self.tuning_stats.timestamp = current_time;
+        
+        Ok(())
+    }
+    
+    // Phân tích hiệu suất hiện tại dựa trên các giao dịch gần đây
+    async fn analyze_current_performance(&self) -> Result<f64> {
+        // Nếu không có đủ kết quả giao dịch để phân tích
+        if self.trade_results.len() < self.config.min_results_for_adjustment {
+            return Err(anyhow!("Không đủ dữ liệu giao dịch để phân tích hiệu suất"));
+        }
+        
+        // Phân tích các kết quả giao dịch
+        let mut total_profit = 0.0;
+        let mut count = 0;
+        
+        for result in &self.trade_results {
+            if result.is_successful() {
+                total_profit += result.get_profit_usd();
+                count += 1;
             }
         }
         
-        // Lưu trữ cấu hình mới
-        self.save_updated_config().await?;
+        if count == 0 {
+            return Ok(0.0);
+        }
         
-        Ok(())
+        // Tính hiệu suất trung bình
+        let avg_profit = total_profit / count as f64;
+        
+        // Lấy mức độ tắc nghẽn mạng hiện tại
+        let congestion_level = self.network_congestion_level.load(Ordering::Relaxed);
+        
+        // Điều chỉnh hiệu suất dựa trên mức độ tắc nghẽn mạng
+        // Khi mạng tắc nghẽn cao, hiệu suất tốt sẽ có giá trị cao hơn
+        let adjusted_performance = avg_profit * (1.0 + (congestion_level as f64 / 10.0));
+        
+        Ok(adjusted_performance)
+    }
+    
+    // Điều chỉnh các tham số dựa trên hiệu suất
+    async fn adjust_parameters(&mut self, performance: f64) -> Result<bool> {
+        // Nếu hiệu suất quá thấp, không điều chỉnh
+        if performance < 0.01 {
+            return Ok(false);
+        }
+        
+        // Điều chỉnh AI confidence threshold nếu có AI module
+        if let Some(ai_module) = &self.ai_module {
+            let mut ai = ai_module.lock().unwrap();
+            let current_threshold = ai.get_confidence_threshold().await;
+            
+            // Tính toán ngưỡng mới dựa trên hiệu suất
+            let performance_factor = performance.min(1.0).max(0.0);
+            let adjustment = self.tuning_config.learning_rate * performance_factor;
+            
+            // Giới hạn trong phạm vi điều chỉnh
+            let clamped_adjustment = adjustment.min(self.tuning_config.max_adjustment)
+                                             .max(self.tuning_config.min_adjustment);
+            
+            // Áp dụng điều chỉnh
+            let new_threshold = current_threshold * (1.0 + clamped_adjustment);
+            let new_threshold = new_threshold.min(0.95).max(0.5); // Giới hạn trong khoảng hợp lý
+            
+            // Cập nhật ngưỡng mới
+            if let Err(e) = ai.set_confidence_threshold(new_threshold).await {
+                warn!("Không thể cập nhật ngưỡng tin cậy AI: {:?}", e);
+                return Ok(false);
+            }
+            
+            info!("Đã điều chỉnh ngưỡng tin cậy AI từ {:.2} thành {:.2}", current_threshold, new_threshold);
+        }
+        
+        // Điều chỉnh các tham số Monte Carlo nếu có
+        if let Some(monte) = &self.monte_equilibrium {
+            let mut simulator = monte.lock().unwrap();
+            
+            // Điều chỉnh số lần mô phỏng dựa trên hiệu suất
+            let current_sims = simulator.get_simulation_count();
+            let performance_factor = performance.min(1.0).max(0.0);
+            
+            // Nếu hiệu suất cao, giảm số lần mô phỏng để tăng tốc độ
+            // Nếu hiệu suất thấp, tăng số lần mô phỏng để tăng độ chính xác
+            let adjustment_factor = if performance_factor > 0.8 {
+                0.9 // Giảm 10%
+            } else if performance_factor < 0.3 {
+                1.2 // Tăng 20%
+            } else {
+                1.0 // Giữ nguyên
+            };
+            
+            let new_sims = (current_sims as f64 * adjustment_factor) as u32;
+            let new_sims = new_sims.min(10000).max(1000); // Giới hạn trong khoảng hợp lý
+            
+            simulator.set_simulation_count(new_sims);
+            info!("Đã điều chỉnh số lần mô phỏng Monte Carlo từ {} thành {}", current_sims, new_sims);
+        }
+        
+        // Điều chỉnh các tham số khác nếu cần
+        
+        Ok(true)
+    }
+    
+    // Lấy thống kê auto-tuning hiện tại
+    pub fn get_tuning_stats(&self) -> AutoTuningStats {
+        self.tuning_stats.clone()
+    }
+    
+    // Cập nhật cấu hình auto-tuning
+    pub fn update_tuning_config(&mut self, config: AutoTuningConfig) {
+        self.tuning_config = config;
+        info!("Đã cập nhật cấu hình auto-tuning");
     }
 
     async fn monitor_ongoing_sandwich_opportunities(&self, last_result: &SandwichResult) -> Result<(), Box<dyn std::error::Error>> {

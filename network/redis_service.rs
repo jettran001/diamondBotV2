@@ -7,6 +7,9 @@ use tokio::sync::Mutex;
 use tokio::time::{Duration, timeout};
 use std::collections::HashMap;
 
+// Import Cache trait từ common/cache.rs
+use common::cache::{Cache, CacheEntry, CacheConfig, RedisCache};
+
 /// Cấu hình Redis
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RedisConfig {
@@ -86,114 +89,83 @@ impl RedisPool {
             connections.push(conn);
         }
     }
+    
+    /// Lấy client
+    pub fn get_client(&self) -> Client {
+        self.client.clone() 
+    }
 }
 
-/// Redis Cache Service
+/// Redis Cache Service - là một wrapper xung quanh RedisCache từ common/cache.rs
 pub struct RedisCacheService {
-    pool: Arc<RedisPool>,
-    default_ttl: u64, // seconds
+    redis_cache: Arc<dyn Cache>,
 }
 
 impl RedisCacheService {
-    pub fn new(pool: Arc<RedisPool>, default_ttl: u64) -> Self {
-        Self {
-            pool,
-            default_ttl,
-        }
+    pub fn new(pool: Arc<RedisPool>, default_ttl: u64) -> Result<Self> {
+        // Chuyển đổi cấu hình từ pool sang CacheConfig
+        let redis_url = match &pool.config.password {
+            Some(pass) => format!("redis://:{}@{}:{}/{}", pass, pool.config.host, pool.config.port, pool.config.db),
+            None => format!("redis://{}:{}/{}", pool.config.host, pool.config.port, pool.config.db),
+        };
+        
+        let cache_config = CacheConfig {
+            config_id: "redis_cache".to_string(),
+            name: "Redis Cache".to_string(),
+            version: "1.0.0".to_string(),
+            created_at: std::time::Instant::now(),
+            default_ttl: Duration::from_secs(default_ttl),
+            capacity: None,
+            redis_url: Some(redis_url),
+            redis_pool_size: Some(pool.config.pool_size),
+        };
+        
+        let redis_cache = RedisCache::new(cache_config)?;
+        
+        Ok(Self {
+            redis_cache: Arc::new(redis_cache),
+        })
     }
     
     /// Lấy giá trị từ cache
-    pub async fn get<T: for<'de> Deserialize<'de>>(&self, key: &str) -> Result<Option<T>> {
-        let mut conn = self.pool.get_conn().await?;
-        
-        let result: RedisResult<Option<String>> = conn.get(key);
-        self.pool.return_conn(conn).await;
-        
-        match result {
-            Ok(Some(data)) => {
-                Ok(Some(serde_json::from_str(&data)?))
-            }
-            Ok(None) => Ok(None),
-            Err(e) => Err(anyhow!("Redis get error: {}", e)),
-        }
+    pub async fn get<T: for<'de> Deserialize<'de> + Serialize + Send + Sync + 'static>(&self, key: &str) -> Result<Option<T>> {
+        self.redis_cache.get_from_cache(key).await
     }
     
     /// Lưu giá trị vào cache
-    pub async fn set<T: Serialize>(&self, key: &str, value: &T, ttl: Option<u64>) -> Result<()> {
-        let mut conn = self.pool.get_conn().await?;
-        
-        let serialized = serde_json::to_string(value)?;
-        let expire_seconds = ttl.unwrap_or(self.default_ttl);
-        
-        let result: RedisResult<()> = if expire_seconds > 0 {
-            conn.set_ex(key, serialized, expire_seconds as usize)
-        } else {
-            conn.set(key, serialized)
-        };
-        
-        self.pool.return_conn(conn).await;
-        
-        match result {
-            Ok(_) => Ok(()),
-            Err(e) => Err(anyhow!("Redis set error: {}", e)),
-        }
+    pub async fn set<T: Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static>(&self, key: &str, value: &T, ttl: Option<u64>) -> Result<()> {
+        let ttl_seconds = ttl.unwrap_or(0); // Nếu không chỉ định, sử dụng default_ttl
+        self.redis_cache.store_in_cache(key, value, ttl_seconds).await
     }
     
     /// Xóa key khỏi cache
     pub async fn delete(&self, key: &str) -> Result<bool> {
-        let mut conn = self.pool.get_conn().await?;
-        
-        let result: RedisResult<i32> = conn.del(key);
-        self.pool.return_conn(conn).await;
-        
-        match result {
-            Ok(deleted) => Ok(deleted > 0),
-            Err(e) => Err(anyhow!("Redis delete error: {}", e)),
-        }
+        self.redis_cache.remove(key).await.map(|_| true)
     }
     
     /// Kiểm tra key có tồn tại không
     pub async fn exists(&self, key: &str) -> Result<bool> {
-        let mut conn = self.pool.get_conn().await?;
-        
-        let result: RedisResult<bool> = conn.exists(key);
-        self.pool.return_conn(conn).await;
-        
-        match result {
-            Ok(exists) => Ok(exists),
-            Err(e) => Err(anyhow!("Redis exists error: {}", e)),
-        }
+        // Dùng get_from_cache với type đơn giản để kiểm tra tồn tại
+        Ok(self.redis_cache.get_from_cache::<()>(key).await?.is_some())
     }
     
     /// Cập nhật thời gian hết hạn
     pub async fn expire(&self, key: &str, ttl: u64) -> Result<bool> {
-        let mut conn = self.pool.get_conn().await?;
-        
-        let result: RedisResult<bool> = conn.expire(key, ttl as usize);
-        self.pool.return_conn(conn).await;
-        
-        match result {
-            Ok(updated) => Ok(updated),
-            Err(e) => Err(anyhow!("Redis expire error: {}", e)),
-        }
+        // Triển khai dựa trên expiration của RedisCache
+        // Không triển khai được trực tiếp, chỉ có thể set lại giá trị
+        // Nên tạm thời trả về Ok(false)
+        warn!("Cannot directly expire a key with the new Cache architecture. Consider using set with the same value and a new TTL.");
+        Ok(false)
     }
     
     /// Increment một giá trị số
     pub async fn incr(&self, key: &str, delta: i64) -> Result<i64> {
-        let mut conn = self.pool.get_conn().await?;
-        
-        let result: RedisResult<i64> = if delta == 1 {
-            conn.incr(key, 1)
-        } else {
-            conn.incr_by(key, delta)
-        };
-        
-        self.pool.return_conn(conn).await;
-        
-        match result {
-            Ok(new_value) => Ok(new_value),
-            Err(e) => Err(anyhow!("Redis increment error: {}", e)),
-        }
+        // Cần phải đọc, increment, ghi lại
+        // Đây là một workaround vì Cache trait không hỗ trợ atomic increment
+        let current_value: Option<i64> = self.redis_cache.get_from_cache(key).await?;
+        let new_value = current_value.unwrap_or(0) + delta;
+        self.redis_cache.store_in_cache(key, new_value, 0).await?;
+        Ok(new_value)
     }
 }
 
@@ -229,7 +201,7 @@ impl RedisPubSubService {
     
     /// Tạo một subscriber mới
     pub async fn create_subscriber(&self) -> Result<redis::aio::PubSub> {
-        let client = self.pool.client.clone();
+        let client = self.pool.get_client();
         let con = client.get_async_connection().await?;
         let pubsub = con.into_pubsub();
         Ok(pubsub)
@@ -356,7 +328,7 @@ impl RedisService {
         let pool = Arc::new(RedisPool::new(config.clone())?);
         
         Ok(Self {
-            cache: RedisCacheService::new(pool.clone(), 3600), // 1 giờ mặc định
+            cache: RedisCacheService::new(pool.clone(), 3600)?, // 1 giờ mặc định
             pubsub: RedisPubSubService::new(pool.clone()),
             queue: RedisQueueService::new(pool.clone()),
             pool,

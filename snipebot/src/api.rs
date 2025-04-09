@@ -18,13 +18,20 @@ use super::storage::Storage;
 use tracing::{info, warn, error};
 use ethers::types::U256;
 use super::user::{UserManager, UserRole, User};
-use super::middleware::{auth_middleware, create_token};
+use common::middleware::auth::{auth_middleware, create_token, Claims, logout, JWTAuthMiddleware, JWTAuthError};
+use common::middleware::rate_limit::ip_rate_limit_middleware;
+use common::middleware::UserRole;
 use tower_http::cors::{CorsLayer, Any};
 use crate::metrics::RETRY_METRICS;
 use crate::utils::{RetryConfig, transaction_retry_config};
 use std::time::{SystemTime, UNIX_EPOCH};
-use diamond_common::middleware::auth::{role_middleware, JWTAuthMiddleware, JWTAuthError};
-use diamond_common::middleware::rate_limit::ip_rate_limit_middleware;
+use crate::types::{
+    NetworkStats,
+    UserInfo,
+    SystemStats,
+    WalletBalance,
+    TokenBalance,
+};
 use crate::user_subscription::SubscriptionLevel;
 use std::collections::HashMap;
 use chrono::Utc;
@@ -34,14 +41,13 @@ use crate::utils::{
 };
 use crate::types::{
     NetworkStats,
-    Claims,
     UserInfo,
     SystemStats,
     WalletBalance,
     TokenBalance,
 };
-use diamond_common::middleware::UserRole;
-use crate::middleware::{Claims, logout};
+use std::sync::{Mutex, RwLock};
+use super::EndpointManager;
 
 /// Cấu trúc phản hồi API
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,6 +72,7 @@ pub struct AppState {
     pub storage: Arc<Storage>,
     pub snipebot: Arc<SnipeBot>,
     pub user_manager: Arc<tokio::sync::Mutex<UserManager>>,
+    pub endpoint_manager: Arc<RwLock<EndpointManager>>,
 }
 
 impl<T> ApiResponse<T> {
@@ -310,7 +317,7 @@ pub fn get_routes(app_state: Arc<AppState>) -> Router {
     // Routes cần xác thực 
     let auth_routes = Router::new()
         .route("/api/auth/me", get(get_current_user))
-        .route("/api/auth/logout", post(logout))
+        .route("/api/auth/logout", post(logout_user))
         .merge(wallet_routes())
         .merge(trading_routes())
         .merge(admin_routes())
@@ -688,19 +695,21 @@ async fn get_wallet_balance(claims: Claims) -> Result<Json<ApiResponse<WalletBal
     }))
 }
 
-async fn logout() -> Result<Json<ApiResponse<String>>, ApiErrorResponse> {
-    match perform_logout().await {
-        Ok(_) => Ok(Json(ApiResponse {
-            status: "success".to_string(),
-            message: "Đăng xuất thành công".to_string(),
-            data: Some("Logged out successfully".to_string()),
-            timestamp: utils::safe_now(),
-        })),
-        Err(_) => Err(ApiErrorResponse::new(
-            500,
-            "Không thể đăng xuất".to_string(),
-        )),
-    }
+async fn logout_user(
+    Path(token): Path<String>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    // Ghi log cho việc logout
+    info!("Logout request with token: {}", token);
+    
+    // Gọi hàm logout từ middleware để invalid token
+    common::middleware::auth::logout(token, &state.token_blacklist).await;
+    
+    Json(ApiResponse {
+        status: "success".to_string(),
+        message: "Đã đăng xuất thành công".to_string(),
+        data: json!({}),
+    })
 }
 
 // Triển khai admin_logout_user
@@ -1061,7 +1070,7 @@ struct AdminStatsResponse {
     system_stats: SystemStats,
 }
 
-/// Struct cho thống kê hệ thống
+/// Struct cho thông kê hệ thống
 #[derive(Debug, Serialize)]
 struct SystemStatsDuplicate {
     cpu_usage: f64,

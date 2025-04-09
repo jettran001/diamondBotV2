@@ -12,17 +12,24 @@ use log::{info, warn, debug, error};
 use anyhow::{Result, anyhow};
 use serde::{Serialize, Deserialize};
 use std::time::{SystemTime, UNIX_EPOCH};
-use crate::chain_adapters::ChainAdapterEnum;
-use std::sync::Mutex;
-use futures::future::join_all;
-use futures::future::Semaphore;
-use crate::abi_utils;
+use tokio::{sync::RwLock};
 use async_trait::async_trait;
-use lru::LruCache;
-use std::num::NonZeroUsize;
-use std::sync::RwLock;
-use std::sync::MutexGuard;
-use crate::cache::{Cache, Cacheable};
+use serde_json::Value;
+use std::{fmt::Debug};
+use metrics::{counter, gauge};
+
+// Import crate modules
+use crate::{
+    chain_adapters::{
+        ChainAdapter, 
+        ChainAdapterEnum, 
+        ChainError, 
+        GasInfo
+    },
+    risk_analyzer::TokenRiskAnalysis,
+};
+
+use common::cache::{Cache, CacheEntry};
 
 /// Cấu trúc thông tin token
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,23 +167,6 @@ pub enum PriceAlertType {
     LiquidityAdded,
 }
 
-/// Phân tích rủi ro của token
-#[derive(Debug, Clone)]
-pub struct TokenRiskAnalysis {
-    /// Điểm rủi ro (0-100)
-    pub risk_score: f64,
-    /// Thông tin thuế
-    pub tax_info: TaxInfo,
-    /// Token đã được verify
-    pub verified_contract: bool,
-    /// Thông tin về liquidity
-    pub liquidity_info: LiquidityInfo,
-    /// Thông tin về holder
-    pub holder_info: HolderInfo,
-    /// Các cảnh báo rủi ro
-    pub risk_warnings: Vec<String>
-}
-
 /// Thông tin về liquidity
 #[derive(Debug, Clone)]
 pub struct LiquidityInfo {
@@ -205,10 +195,10 @@ pub trait AsyncTokenStatusTracker: TokenStatusTrackerBase {
     async fn update_all_tokens(&mut self) -> Result<(), Box<dyn std::error::Error>>;
 }
 
-// Main struct implementation
+/// Token Status Tracker
 pub struct TokenStatusTracker {
     adapter: ChainAdapterEnum,
-    tracked_tokens: Cache<TokenStatus>,
+    tracked_tokens: Arc<RwLock<HashMap<String, CacheEntry<TokenStatus>>>>,
     factory_addresses: Vec<Address>,
     router_addresses: Vec<Address>,
     token_abi: ethers::abi::Abi,
@@ -219,19 +209,53 @@ pub struct TokenStatusTracker {
     max_tokens: usize,
 }
 
-impl Cacheable for TokenStatusTracker {
-    type Value = TokenStatus;
-
-    fn get_from_cache(&self, key: &str) -> Option<Self::Value> {
-        self.tracked_tokens.get(key)
+#[async_trait]
+impl Cache for TokenStatusTracker {
+    async fn get_from_cache<T: Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static>(&self, key: &str) -> Result<Option<T>> {
+        let tokens = self.tracked_tokens.read().map_err(|e| anyhow!("RwLock error: {}", e))?;
+        if let Some(entry) = tokens.get(key) {
+            if !entry.is_expired() {
+                if let Ok(value) = serde_json::to_string(&entry.value) {
+                    return Ok(Some(serde_json::from_str(&value)?));
+                }
+            }
+        }
+        Ok(None)
     }
 
-    fn store_in_cache(&self, key: &str, value: &Self::Value, ttl_seconds: u64) -> Result<()> {
-        self.tracked_tokens.set(key, value.clone(), ttl_seconds)
+    async fn store_in_cache<T: Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static>(&self, key: &str, value: T, ttl_seconds: u64) -> Result<()> {
+        let json_value = serde_json::to_value(value)?;
+        if let Ok(token_status) = serde_json::from_value::<TokenStatus>(json_value) {
+            let mut tokens = self.tracked_tokens.write().map_err(|e| anyhow!("RwLock error: {}", e))?;
+            tokens.insert(key.to_string(), CacheEntry::new(token_status, ttl_seconds));
+        }
+        Ok(())
     }
 
-    fn cleanup_cache(&self) {
-        self.tracked_tokens.cleanup()
+    async fn remove(&self, key: &str) -> Result<()> {
+        let mut tokens = self.tracked_tokens.write().map_err(|e| anyhow!("RwLock error: {}", e))?;
+        tokens.remove(key);
+        Ok(())
+    }
+
+    async fn clear(&self) -> Result<()> {
+        let mut tokens = self.tracked_tokens.write().map_err(|e| anyhow!("RwLock error: {}", e))?;
+        tokens.clear();
+        Ok(())
+    }
+
+    async fn cleanup_cache(&self) -> Result<()> {
+        let mut tokens = self.tracked_tokens.write().map_err(|e| anyhow!("RwLock error: {}", e))?;
+        let keys_to_remove: Vec<String> = tokens
+            .iter()
+            .filter(|(_, entry)| entry.is_expired())
+            .map(|(key, _)| key.clone())
+            .collect();
+        
+        for key in keys_to_remove {
+            tokens.remove(&key);
+        }
+        Ok(())
     }
 }
 
@@ -259,7 +283,7 @@ impl TokenStatusTracker {
         
         // Tạo LruCache với kích thước hợp lý (1000 tokens)
         let max_tokens = 1000;
-        let cache = Cache::new();
+        let cache = Arc::new(RwLock::new(HashMap::new()));
         
         Ok(Self {
             adapter,
@@ -279,22 +303,22 @@ impl TokenStatusTracker {
     pub async fn add_token(&mut self, token_address: &str) -> Result<()> {
         // Khi sử dụng LruCache, không cần kiểm tra contains_key() vì LruCache tự động quản lý
         let status = self.get_token_status(token_address).await?;
-        self.tracked_tokens.set(token_address, status, 300);
+        self.tracked_tokens.write().map_err(|e| anyhow!("RwLock error: {}", e))?.insert(token_address.to_string(), CacheEntry::new(status, 300));
         
         Ok(())
     }
     
     // Xóa token khỏi danh sách theo dõi
     pub fn remove_token(&mut self, token_address: &str) -> bool {
-        self.tracked_tokens.remove(token_address).is_some()
+        self.tracked_tokens.write().map_err(|e| anyhow!("RwLock error: {}", e)).unwrap().remove(token_address).is_some()
     }
     
     // Lấy thông tin token
     pub async fn get_token(&self, token_address: &str) -> Result<Option<TokenStatus>, Box<dyn std::error::Error>> {
         // Khi sử dụng LruCache, cần clone token_address trước khi gọi get
         let token_key = token_address.to_string();
-        if let Some(status) = self.tracked_tokens.get(&token_key) {
-            return Ok(Some(status.clone()));
+        if let Some(status) = self.tracked_tokens.read().map_err(|e| anyhow!("RwLock error: {}", e))?.get(&token_key) {
+            return Ok(Some(status.value.clone()));
         }
         
         Ok(None)
@@ -304,7 +328,7 @@ impl TokenStatusTracker {
     pub async fn update_all_tokens(&mut self) -> Result<Vec<TokenPriceAlert>> {
         let mut alerts = Vec::new();
         
-        let tokens_to_update: Vec<String> = self.tracked_tokens.keys().cloned().collect();
+        let tokens_to_update: Vec<String> = self.tracked_tokens.read().map_err(|e| anyhow!("RwLock error: {}", e))?.keys().cloned().collect();
         
         // Sử dụng tokio::task::JoinSet để xử lý song song
         let mut join_set = tokio::task::JoinSet::new();
@@ -316,7 +340,7 @@ impl TokenStatusTracker {
         for token_address in tokens_to_update {
             let adapter = self.adapter.clone();
             let semaphore_clone = semaphore.clone();
-            let old_status = self.tracked_tokens.get(&token_address).cloned();
+            let old_status = self.tracked_tokens.read().map_err(|e| anyhow!("RwLock error: {}", e))?.get(&token_address).cloned();
             
             // Chỉ xử lý nếu token đã được theo dõi
             if let Some(old_status) = old_status {
@@ -365,7 +389,7 @@ impl TokenStatusTracker {
             match result {
                 Ok((token_address, old_status, Ok(new_status))) => {
                     // Cập nhật trạng thái token
-                    self.tracked_tokens.set(token_address, new_status, 300);
+                    self.tracked_tokens.write().map_err(|e| anyhow!("RwLock error: {}", e))?.insert(token_address, CacheEntry::new(new_status, 300));
                     
                     // Kiểm tra biến động giá và tạo cảnh báo nếu cần
                     if let Some(alert) = self.check_price_alert(&token_address, &old_status, &new_status) {
@@ -398,7 +422,7 @@ impl TokenStatusTracker {
         
         // Giảm kích thước cache nếu quá lớn
         let max_cache_size = 1000;
-        if self.tracked_tokens.len() > max_cache_size {
+        if self.tracked_tokens.read().map_err(|e| anyhow!("RwLock error: {}", e))?.len() > max_cache_size {
             let reduced = self.reduce_cache_size(max_cache_size);
             debug!("Đã giảm {} token từ cache", reduced);
         }
@@ -607,72 +631,51 @@ impl TokenStatusTracker {
     
     // Phân loại token theo mức độ an toàn
     pub fn classify_token(&self, token_status: &TokenStatus, risk_analysis: Option<&TokenRiskAnalysis>) -> TokenSafetyLevel {
-        // Nếu có phân tích rủi ro, ưu tiên sử dụng
+        // Nếu có risk_analysis, sử dụng để phân loại
         if let Some(analysis) = risk_analysis {
-            // Kiểm tra các điều kiện nguy hiểm
-            if analysis.is_honeypot || 
-               analysis.has_antibot ||
-               !analysis.can_sell || 
-               analysis.tax_info.buy_tax > 10.0 || 
-               analysis.tax_info.sell_tax > 10.0 ||
-               !analysis.verified_contract ||
-               analysis.flags.contains(&"mint_function".to_string()) ||
-               analysis.flags.contains(&"blacklisted".to_string()) {
+            // Phân loại dựa trên điểm rủi ro
+            if analysis.base.risk_score < 35.0 {
+                return TokenSafetyLevel::Green;
+            } else if analysis.base.risk_score < 75.0 {
+                return TokenSafetyLevel::Yellow;
+            } else {
                 return TokenSafetyLevel::Red;
             }
-            
-            // Kiểm tra các điều kiện trung bình
-            if ((analysis.risk_score >= 60 && analysis.risk_score < 80) ||
-                (analysis.tax_info.buy_tax <= 5.0 && analysis.tax_info.sell_tax <= 5.0) ||
-                analysis.verified_contract) &&
-               token_status.liquidity >= 2000.0 &&
-               token_status.pending_tx_count >= 10 {
-                return TokenSafetyLevel::Yellow;
-            }
-            
-            // Điều kiện cho token tốt
-            if analysis.risk_score < 60 && 
-               analysis.verified_contract && 
-               !analysis.has_antibot && 
-               token_status.liquidity >= 10000.0 && 
-               token_status.pending_tx_count >= 10 {
-                return TokenSafetyLevel::Green;
-            }
-            
-            // Mặc định là trung bình nếu không rơi vào các trường hợp trên
-            return TokenSafetyLevel::Yellow;
         }
         
-        // Nếu không có phân tích rủi ro, dựa vào token status
-        if !token_status.is_contract_verified || 
-           token_status.has_dangerous_functions ||
-           token_status.dangerous_functions.len() > 0 {
+        // Phân loại dựa trên thông tin token_status nếu không có risk_analysis
+        if !token_status.is_contract_verified || token_status.has_dangerous_functions {
             return TokenSafetyLevel::Red;
         }
         
-        if token_status.liquidity >= 10000.0 && 
-           token_status.pending_tx_count >= 10 && 
-           token_status.is_contract_verified &&
-           token_status.audit_score.unwrap_or(0) >= 80 &&
-           !token_status.has_dangerous_functions {
-            return TokenSafetyLevel::Green;
+        // Kiểm tra thuế
+        if let Some(tax_info) = &token_status.tax_info {
+            if tax_info.buy_tax > 20.0 || tax_info.sell_tax > 20.0 {
+                return TokenSafetyLevel::Red;
+            }
+            
+            if tax_info.buy_tax > 10.0 || tax_info.sell_tax > 10.0 {
+                return TokenSafetyLevel::Yellow;
+            }
         }
         
-        if token_status.liquidity >= 2000.0 && 
-           token_status.pending_tx_count >= 10 && 
-           token_status.is_contract_verified &&
-           token_status.audit_score.unwrap_or(0) >= 60 {
+        // Kiểm tra thanh khoản
+        if token_status.liquidity < 5000.0 {
+            return TokenSafetyLevel::Red;
+        }
+        
+        if token_status.liquidity < 50000.0 {
             return TokenSafetyLevel::Yellow;
         }
         
-        // Mặc định là Red
-        TokenSafetyLevel::Red
+        // Mặc định - Green
+        TokenSafetyLevel::Green
     }
     
     // Tích hợp với mempool để cập nhật pending_tx_count
     pub async fn update_pending_tx_count(&mut self, token_address: &str, count: u32) -> Result<()> {
-        if let Some(status) = self.tracked_tokens.get_mut(token_address) {
-            status.pending_tx_count = count;
+        if let Some(status) = self.tracked_tokens.read().map_err(|e| anyhow!("RwLock error: {}", e))?.get_mut(token_address) {
+            status.value.pending_tx_count = count;
             Ok(())
         } else {
             Err(anyhow!("Token không được theo dõi"))
@@ -719,7 +722,7 @@ impl TokenStatusTracker {
         self.update_token_market_info(&mut token_status).await?;
         
         // Lưu vào cache
-        self.tracked_tokens.set(token_address, token_status.clone(), 300);
+        self.tracked_tokens.write().map_err(|e| anyhow!("RwLock error: {}", e))?.insert(token_address.to_string(), CacheEntry::new(token_status.clone(), 300));
         
         // Gửi đến AIModule nếu đạt ngưỡng an toàn
         if let Some(safety_threshold) = self.config.ai_safety_threshold {
@@ -735,13 +738,16 @@ impl TokenStatusTracker {
         if let Some(ai_module) = &self.ai_module {
             let mut ai_module = ai_module.lock().await;
             ai_module.analyze_new_token(token_address, status, risk_analysis).await?;
+            
+            info!("Đã gửi thông tin token {} đến AI Module để phân tích.", token_address);
         }
+        
         Ok(())
     }
 
     pub async fn update_token_prices(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         // Tạo danh sách token cần cập nhật - cần sửa để lấy từ LruCache
-        let token_addresses: Vec<String> = self.tracked_tokens.keys().cloned().collect();
+        let token_addresses: Vec<String> = self.tracked_tokens.read().map_err(|e| anyhow!("RwLock error: {}", e))?.keys().cloned().collect();
         let count = token_addresses.len();
         
         if count == 0 {
@@ -825,9 +831,9 @@ impl TokenStatusTracker {
             match result {
                 Ok(Some((address, status))) => {
                     // Cập nhật giá và thời gian cập nhật
-                    if let Some(token) = self.tracked_tokens.get_mut(&address) {
-                        *token = status;
-                        token.last_updated = utils::safe_now();
+                    if let Some(token) = self.tracked_tokens.read().map_err(|e| anyhow!("RwLock error: {}", e))?.get_mut(&address) {
+                        *token = CacheEntry::new(status, 300);
+                        token.value.last_updated = utils::safe_now();
                         update_count += 1;
                     }
                 },
@@ -886,9 +892,10 @@ impl TokenStatusTracker {
     
     /// Phương thức dọn dẹp các token cũ không còn được sử dụng
     pub fn cleanup_old_tokens(&mut self, current_time: u64, max_age_seconds: u64) -> usize {
-        let tokens_to_remove: Vec<String> = self.tracked_tokens.iter()
+        let tokens_to_remove: Vec<String> = self.tracked_tokens.read().map_err(|e| anyhow!("RwLock error: {}", e))?
+            .iter()
             .filter_map(|(token_address, status)| {
-                if let Some(last_updated) = status.last_updated {
+                if let Some(last_updated) = status.value.last_updated {
                     if current_time > last_updated && current_time - last_updated > max_age_seconds {
                         return Some(token_address.clone());
                     }
@@ -899,7 +906,7 @@ impl TokenStatusTracker {
         
         let count = tokens_to_remove.len();
         for token in tokens_to_remove {
-            self.tracked_tokens.remove(token);
+            self.tracked_tokens.write().map_err(|e| anyhow!("RwLock error: {}", e))?.remove(token);
         }
         
         count
@@ -907,16 +914,16 @@ impl TokenStatusTracker {
     
     /// Giảm kích thước cache bằng cách xóa các token ít sử dụng nhất
     pub fn reduce_cache_size(&mut self, target_size: usize) -> usize {
-        let current_size = self.tracked_tokens.len();
+        let current_size = self.tracked_tokens.read().map_err(|e| anyhow!("RwLock error: {}", e))?.len();
         if current_size <= target_size {
             return 0;
         }
         
         // Sắp xếp tokens theo thời gian cập nhật gần nhất
-        let mut tokens_with_time: Vec<(String, u64)> = self.tracked_tokens
+        let mut tokens_with_time: Vec<(String, u64)> = self.tracked_tokens.read().map_err(|e| anyhow!("RwLock error: {}", e))?
             .iter()
             .map(|(addr, status)| {
-                (addr.clone(), status.last_updated.unwrap_or(0))
+                (addr.clone(), status.value.last_updated.unwrap_or(0))
             })
             .collect();
         
@@ -929,7 +936,7 @@ impl TokenStatusTracker {
         // Xóa các token cũ nhất
         for i in 0..to_remove {
             if i < tokens_with_time.len() {
-                self.tracked_tokens.remove(tokens_with_time[i].0);
+                self.tracked_tokens.write().map_err(|e| anyhow!("RwLock error: {}", e))?.remove(tokens_with_time[i].0);
             }
         }
         
@@ -964,7 +971,7 @@ pub async fn try_lock_tracker(token_status_tracker: &Arc<Mutex<TokenStatusTracke
 pub async fn recover_from_deadlock(token_status_tracker: &Arc<Mutex<TokenStatusTracker>>) -> Result<(), Box<dyn std::error::Error>> {
     // Tạo tracker mới
     let new_tracker = TokenStatusTracker {
-        tracked_tokens: Cache::new(),
+        tracked_tokens: Arc::new(RwLock::new(HashMap::new())),
         price_alerts: HashMap::new(),
         alert_callbacks: Vec::new(),
         adapter: token_status_tracker.lock().await?.adapter.clone(),

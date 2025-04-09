@@ -1,14 +1,24 @@
+// External imports
+use ethers::providers::{Provider, Http};
+use ethers::types::{TransactionReceipt, U256};
 use serde::{Deserialize, Serialize};
+
+// Standard library imports
+use std::collections::HashMap;
+use std::env;
+use std::future::Future;
+use std::io::{Error, ErrorKind};
 use std::sync::Arc;
+use std::time::Duration;
+
+// Internal imports
+use crate::chain_adapters::ChainConfig;
+
+// Third party imports
 use anyhow::Result;
 use dotenv::dotenv;
-use std::env;
-use std::collections::HashMap;
-use log;
-use std::time::Duration;
-use std::future::Future;
+use log::{info, warn};
 use tokio;
-use ethers::providers::{Provider, Http};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum BotMode {
@@ -193,14 +203,79 @@ pub fn init_config() -> Arc<Config> {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct ChainConfig {
-    pub chain_id: u64,
-    pub rpc_url: String,
-    pub router_address: String,
-    pub weth_address: String,
-    pub block_time: u64, // ms
-    pub fallback_rpc_urls: Vec<String>, // Thêm danh sách RPC dự phòng
+/// Trả về danh sách các chain được định nghĩa trước
+pub fn get_predefined_chains() -> HashMap<String, ChainConfig> {
+    let mut chains = HashMap::new();
+    
+    // Ethereum Mainnet
+    chains.insert("ethereum".to_string(), ChainConfig {
+        name: "Ethereum".to_string(),
+        chain_id: 1,
+        rpc_url: "https://eth.llamarpc.com".to_string(),
+        native_symbol: "ETH".to_string(),
+        wrapped_native_token: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(), // WETH
+        router_address: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D".to_string(), // Uniswap V2 Router
+        factory_address: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f".to_string(), // Uniswap V2 Factory
+        explorer_url: "https://etherscan.io".to_string(),
+        block_time: 12000, // ~12 seconds
+        default_gas_limit: 500000,
+        default_gas_price: 20000000000, // 20 Gwei
+        eip1559_supported: true,
+        max_priority_fee: Some(2000000000), // 2 Gwei
+    });
+    
+    // Binance Smart Chain
+    chains.insert("bsc".to_string(), ChainConfig {
+        name: "Binance Smart Chain".to_string(),
+        chain_id: 56,
+        rpc_url: "https://bsc-dataseed.binance.org".to_string(),
+        native_symbol: "BNB".to_string(),
+        wrapped_native_token: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c".to_string(),
+        router_address: "0x10ED43C718714eb63d5aA57B78B54704E256024E".to_string(), // PancakeSwap Router
+        factory_address: "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73".to_string(), // PancakeSwap Factory
+        explorer_url: "https://bscscan.com".to_string(),
+        block_time: 3000, // ~3 seconds
+        default_gas_limit: 500000,
+        default_gas_price: 5000000000, // 5 Gwei
+        eip1559_supported: false,
+        max_priority_fee: None,
+    });
+    
+    // Arbitrum
+    chains.insert("arbitrum".to_string(), ChainConfig {
+        name: "Arbitrum".to_string(),
+        chain_id: 42161,
+        rpc_url: "https://arb1.arbitrum.io/rpc".to_string(),
+        native_symbol: "ETH".to_string(),
+        wrapped_native_token: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1".to_string(),
+        router_address: "0x1b02da8cb0d097eb8d57a175b88c7d8b47997506".to_string(), // SushiSwap Router
+        factory_address: "0xc35DADB65012eC5796536bD9864eD8773aBc74C4".to_string(), // SushiSwap Factory
+        explorer_url: "https://arbiscan.io".to_string(),
+        block_time: 250, // ~0.25 seconds
+        default_gas_limit: 1000000,
+        default_gas_price: 100000000, // 0.1 Gwei
+        eip1559_supported: true,
+        max_priority_fee: Some(10000000), // 0.01 Gwei
+    });
+    
+    // Base
+    chains.insert("base".to_string(), ChainConfig {
+        name: "Base".to_string(),
+        chain_id: 8453,
+        rpc_url: "https://mainnet.base.org".to_string(),
+        native_symbol: "ETH".to_string(),
+        wrapped_native_token: "0x4200000000000000000000000000000000000006".to_string(),
+        router_address: "0x8c1a3cf8f83074169fe5d7ad50b978e1cadff129".to_string(), // BaseSwap Router
+        factory_address: "0xfda619b6d20975be80a10332cd39b9a4b0e4f9bb".to_string(), // BaseSwap Factory
+        explorer_url: "https://basescan.org".to_string(),
+        block_time: 2000, // ~2 seconds
+        default_gas_limit: 800000,
+        default_gas_price: 1000000000, // 1 Gwei
+        eip1559_supported: true,
+        max_priority_fee: Some(100000000), // 0.1 Gwei
+    });
+    
+    chains
 }
 
 #[derive(Clone, Debug)]
@@ -239,7 +314,7 @@ impl EthereumAdapter {
             match Provider::<Http>::try_from(url.as_str()) {
                 Ok(provider) => {
                     if let Ok(_) = provider.get_block_number().await {
-                        log::info!("Đã chuyển sang provider dự phòng: {}", url);
+                        info!("Đã chuyển sang provider dự phòng: {}", url);
                         return provider;
                     }
                 },
@@ -248,7 +323,7 @@ impl EthereumAdapter {
         }
         
         // Nếu tất cả đều thất bại, trả về provider chính
-        log::warn!("Tất cả provider đều không khả dụng, sử dụng provider chính");
+        warn!("Tất cả provider đều không khả dụng, sử dụng provider chính");
         self.provider.clone()
     }
     
@@ -356,8 +431,8 @@ where
         delay = config.initial_retry_delay;
     }
     
-    Err(last_error.unwrap_or_else(|| Box::new(std::io::Error::new(
-        std::io::ErrorKind::Other, 
+    Err(last_error.unwrap_or_else(|| Box::new(Error::new(
+        ErrorKind::Other, 
         "All providers failed"
     ))))
 }

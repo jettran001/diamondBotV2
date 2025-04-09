@@ -32,8 +32,9 @@ use crate::{
         retry_policy::{RetryContext, create_default_retry_policy},
         connection_pool::{get_or_create_pool, ProviderGuard},
     },
-    cache::{Cache, JSONCache, Cacheable},
 };
+
+use common::cache::{Cache, JSONCache, CacheEntry, CacheConfig};
 
 /// Cấu hình cơ bản cho một mạng EVM
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,19 +89,26 @@ pub struct EVMAdapter {
     cache: JSONCache,
 }
 
-impl Cacheable for EVMAdapter {
-    type Value = serde_json::Value;
-
-    fn get_from_cache(&self, key: &str) -> Option<Self::Value> {
-        self.cache.get(key)
+#[async_trait]
+impl Cache for EVMAdapter {
+    async fn get_from_cache<T: Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static>(&self, key: &str) -> Result<Option<T>> {
+        self.cache.get_from_cache(key).await
     }
 
-    fn store_in_cache(&self, key: &str, value: &Self::Value, ttl_seconds: u64) -> Result<()> {
-        self.cache.set(key, value.clone(), ttl_seconds)
+    async fn store_in_cache<T: Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static>(&self, key: &str, value: T, ttl_seconds: u64) -> Result<()> {
+        self.cache.store_in_cache(key, value, ttl_seconds).await
     }
 
-    fn cleanup_cache(&self) {
-        self.cache.cleanup()
+    async fn remove(&self, key: &str) -> Result<()> {
+        self.cache.remove(key).await
+    }
+
+    async fn clear(&self) -> Result<()> {
+        self.cache.clear().await
+    }
+
+    async fn cleanup_cache(&self) -> Result<()> {
+        self.cache.cleanup_cache().await
     }
 }
 

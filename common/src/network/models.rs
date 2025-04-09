@@ -4,6 +4,7 @@ use std::net::SocketAddr;
 use std::fmt::{self, Display, Formatter};
 use chrono::{DateTime, Utc};
 use anyhow::Result;
+use ethers::types::U256;
 
 /// Node trong mạng
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,6 +21,31 @@ pub struct Node {
     pub connected_at: DateTime<Utc>,
     /// Thời gian hoạt động cuối
     pub last_activity: DateTime<Utc>,
+}
+
+impl Node {
+    /// Tạo node mới
+    pub fn new(address: String, node_type: NodeType) -> Self {
+        let now = Utc::now();
+        Self {
+            id: Uuid::new_v4(),
+            address,
+            node_type,
+            status: NodeStatus::Connecting,
+            connected_at: now,
+            last_activity: now,
+        }
+    }
+    
+    /// Cập nhật thời gian hoạt động
+    pub fn update_activity(&mut self) {
+        self.last_activity = Utc::now();
+    }
+    
+    /// Kiểm tra node có online không
+    pub fn is_online(&self) -> bool {
+        self.status == NodeStatus::Online
+    }
 }
 
 /// Loại node
@@ -63,6 +89,25 @@ pub struct Message {
     pub timestamp: DateTime<Utc>,
 }
 
+impl Message {
+    /// Tạo message mới
+    pub fn new(sender: Uuid, recipient: Option<Uuid>, message_type: MessageType, payload: String) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            sender,
+            recipient,
+            message_type,
+            payload,
+            timestamp: Utc::now(),
+        }
+    }
+    
+    /// Kiểm tra message có phải broadcast không
+    pub fn is_broadcast(&self) -> bool {
+        self.recipient.is_none()
+    }
+}
+
 /// Loại message
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MessageType {
@@ -89,6 +134,75 @@ pub struct ConnectionInfo {
     pub connected_at: DateTime<Utc>,
     /// Thời gian hoạt động cuối
     pub last_activity: DateTime<Utc>,
+}
+
+impl ConnectionInfo {
+    /// Tạo kết nối mới
+    pub fn new(address: SocketAddr) -> Self {
+        let now = Utc::now();
+        Self {
+            id: Uuid::new_v4(),
+            address,
+            connected_at: now,
+            last_activity: now,
+        }
+    }
+    
+    /// Cập nhật thời gian hoạt động
+    pub fn update_activity(&mut self) {
+        self.last_activity = Utc::now();
+    }
+}
+
+/// Cấu trúc thống kê mạng
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkStats {
+    /// Số bytes đã gửi
+    pub bytes_sent: u64,
+    /// Số bytes đã nhận
+    pub bytes_received: u64,
+    /// Số packets đã gửi
+    pub packets_sent: u64,
+    /// Số packets đã nhận
+    pub packets_received: u64,
+}
+
+impl Default for NetworkStats {
+    fn default() -> Self {
+        Self {
+            bytes_sent: 0,
+            bytes_received: 0,
+            packets_sent: 0,
+            packets_received: 0,
+        }
+    }
+}
+
+/// Thông tin về trạng thái mạng
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkState {
+    /// Giá gas hiện tại
+    pub gas_price: u64,
+    /// Mức độ tắc nghẽn (0-100)
+    pub congestion_level: u8,
+    /// Thời gian block trung bình
+    pub block_time: f64,
+    /// Số lượng giao dịch đang chờ
+    pub pending_tx_count: u32,
+    /// Base fee của block mới nhất
+    pub base_fee: U256,
+}
+
+impl Default for NetworkState {
+    fn default() -> Self {
+        Self {
+            gas_price: 0,
+            congestion_level: 0,
+            block_time: 0.0,
+            pending_tx_count: 0,
+            base_fee: U256::zero(),
+        }
+    }
 }
 
 /// Module tests
@@ -152,5 +266,45 @@ mod tests {
         let old_activity = conn.last_activity;
         conn.update_activity();
         assert!(conn.last_activity > old_activity);
+    }
+
+    /// Test NetworkStats
+    #[test]
+    fn test_network_stats() {
+        let stats = NetworkStats {
+            bytes_sent: 1000,
+            bytes_received: 500,
+            packets_sent: 10,
+            packets_received: 5,
+        };
+        assert_eq!(stats.bytes_sent, 1000);
+        assert_eq!(stats.bytes_received, 500);
+        assert_eq!(stats.packets_sent, 10);
+        assert_eq!(stats.packets_received, 5);
+        
+        let default_stats = NetworkStats::default();
+        assert_eq!(default_stats.bytes_sent, 0);
+        assert_eq!(default_stats.bytes_received, 0);
+    }
+
+    /// Test NetworkState
+    #[test]
+    fn test_network_state() {
+        let state = NetworkState {
+            gas_price: 50,
+            congestion_level: 75,
+            block_time: 12.5,
+            pending_tx_count: 1000,
+            base_fee: U256::from(100),
+        };
+        assert_eq!(state.gas_price, 50);
+        assert_eq!(state.congestion_level, 75);
+        assert_eq!(state.block_time, 12.5);
+        assert_eq!(state.pending_tx_count, 1000);
+        assert_eq!(state.base_fee, U256::from(100));
+        
+        let default_state = NetworkState::default();
+        assert_eq!(default_state.gas_price, 0);
+        assert_eq!(default_state.congestion_level, 0);
     }
 } 

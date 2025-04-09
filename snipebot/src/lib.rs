@@ -24,6 +24,11 @@ use crate::{
     error_handling::{TransactionError, SnipeBotError},
 };
 
+// Common crate imports - Sử dụng hệ thống cache thống nhất
+use common::cache;
+// Thêm common middleware
+use common::middleware;
+
 // Third party imports
 use anyhow::Result;
 use tracing::{info, warn, error, debug};
@@ -39,11 +44,17 @@ pub mod wallet;
 pub mod blockchain;
 pub mod network;
 pub mod snipebot;
-pub mod middleware;
+pub mod middleware; // Giữ lại để tương thích, nhưng deprecated
 pub mod error_handling;
 pub mod api;
 pub mod risk_analyzer;
-
+pub mod wallet;
+pub mod mempool;
+pub mod ai;
+pub mod module_manager;
+pub mod health_monitor;
+pub mod trade_executor;
+pub mod subscription_manager;
 // Re-exports
 pub use {
     types::*,
@@ -54,7 +65,8 @@ pub use {
     blockchain::*,
     network::*,
     snipebot::*,
-    middleware::*,
+    // Middleware được re-export từ common
+    common::middleware::*,
     error_handling::*,
     api::*,
     risk_analyzer::*
@@ -69,15 +81,13 @@ pub mod mempool;
 pub mod rate_limit;
 pub mod storage;
 pub mod token_status;
-pub mod trade_logic;
-pub mod trade_manager;
 
 // Re-export core types
 pub use config::{Config, NetworkConfig};
 pub use snipebot::SnipeBot;
 pub use storage::Storage;
 pub use error_handling::TransactionError;
-pub use trade_logic::{TradeResult, TradeType};
+pub use trade::trade_logic::{TradeResult, TradeType, TradeManager};
 pub use token_status::TokenStatus;
 pub use utils::{try_with_timeout, try_lock_with_timeout, RetryConfig};
 pub use chain_adapters::nonce_manager;
@@ -116,7 +126,6 @@ pub use risk_analyzer::{
 
 // Re-export core functionality
 pub use retry_policy::RetryPolicy;
-pub use trade_manager::TradeManager;
 
 // Testing utilities
 #[cfg(test)]
@@ -144,43 +153,13 @@ pub use crate::error_handling::SnipeBotError as Error;
 pub use crate::service::SnipeService;
 pub use crate::utils::safe_now;
 
-// Re-exports from the new modules
-pub use chain_adapters::{
-    ChainAdapter,
-    AsyncChainAdapter,
-    ChainConfig,
-    GasInfo,
-    TokenInfo,
-    BlockInfo,
-    NodeInfo,
-};
+// Re-export các module phụ thuộc
+pub mod cache;
+pub use common::cache;
 
-pub use types::{
-    WalletBalance,
-    TokenBalance,
-    NetworkStats,
-    SystemStats,
-};
+// Re-exports from the new modules đã được gom nhóm ở trên
+// Loại bỏ các re-export trùng lặp 
 
-pub use blockchain::{
-    BlockchainService,
-    TransactionService,
-};
-
-pub use network::{
-    NetworkService,
-    ConnectionPool,
-};
-
-pub use storage::{
-    StorageService,
-    CacheService,
-};
-
-pub use risk_analyzer::{
-    RiskAnalyzer,
-    TokenRiskAnalysis,
-};
-
-pub use retry_policy::RetryPolicy;
-pub use trade_manager::TradeManager; 
+// Re-export các module phụ thuộc
+pub mod cache;
+pub use common::cache; 

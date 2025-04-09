@@ -14,10 +14,11 @@ mod gas_optimizer;
 mod user_subscription;
 mod subscription;
 mod error;
+// Đã hợp nhất endpoint_manager.rs vào main.rs
 
 use std::sync::Arc;
 use tokio;
-use log::{info, error, debug};
+use log::{info, error, debug, warn};
 use tokio::signal;
 use tokio::sync::{Mutex, mpsc, oneshot};
 use crate::config::Config;
@@ -37,8 +38,262 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use std::path::Path;
 use ethers::providers::Provider;
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH, Duration};
 use tokio::sync::RwLock;
+use serde::{Serialize, Deserialize};
+use anyhow::{Result, anyhow, Context};
+
+// Struct EndpointInfo từ endpoint_manager.rs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EndpointInfo {
+    pub url: String,
+    pub chain_id: u64,
+    pub name: String,
+    pub priority: u32,
+    pub enabled: bool,
+}
+
+// Struct EndpointStats từ endpoint_manager.rs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EndpointStats {
+    pub total_requests: u64,
+    pub success_rate: f64,
+    pub average_latency: u64,
+    pub last_error: Option<String>,
+    pub timestamp: u64,
+}
+
+// EndpointManager từ endpoint_manager.rs
+#[derive(Debug)]
+pub struct EndpointManager {
+    endpoints: HashMap<String, Vec<EndpointInfo>>,
+    stats: RwLock<HashMap<String, EndpointStats>>,
+    last_update: RwLock<u64>,
+}
+
+impl EndpointManager {
+    // Tạo một EndpointManager mới
+    pub fn new() -> Self {
+        Self {
+            endpoints: HashMap::new(),
+            stats: RwLock::new(HashMap::new()),
+            last_update: RwLock::new(0),
+        }
+    }
+    
+    // Thêm endpoint mới
+    pub fn add_endpoint(&mut self, endpoint: EndpointInfo) {
+        let chain_id = endpoint.chain_id.to_string();
+        
+        if !self.endpoints.contains_key(&chain_id) {
+            self.endpoints.insert(chain_id.clone(), Vec::new());
+        }
+        
+        if let Some(endpoints) = self.endpoints.get_mut(&chain_id) {
+            // Kiểm tra xem endpoint đã tồn tại chưa
+            if !endpoints.iter().any(|e| e.url == endpoint.url) {
+                endpoints.push(endpoint);
+                // Sắp xếp theo priority giảm dần
+                endpoints.sort_by(|a, b| b.priority.cmp(&a.priority));
+            }
+        }
+    }
+    
+    // Lấy endpoint tốt nhất cho một chain
+    pub fn get_best_endpoint(&self, chain_id: u64) -> Option<EndpointInfo> {
+        let chain_id = chain_id.to_string();
+        
+        if let Some(endpoints) = self.endpoints.get(&chain_id) {
+            // Lọc các endpoint đang enabled và trả về endpoint có priority cao nhất
+            endpoints.iter()
+                .filter(|e| e.enabled)
+                .next()
+                .cloned()
+        } else {
+            None
+        }
+    }
+    
+    // Cập nhật thống kê cho một endpoint
+    pub async fn update_stats(&self, url: &str, success: bool, latency_ms: u64, error: Option<String>) {
+        let mut stats = self.stats.write().await;
+        
+        let endpoint_stats = stats.entry(url.to_string()).or_insert(EndpointStats {
+            total_requests: 0,
+            success_rate: 1.0,
+            average_latency: 0,
+            last_error: None,
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        });
+        
+        // Cập nhật thống kê
+        endpoint_stats.total_requests += 1;
+        
+        // Cập nhật success rate (tỷ lệ thành công)
+        if endpoint_stats.total_requests > 1 {
+            let old_success_count = (endpoint_stats.success_rate * (endpoint_stats.total_requests - 1) as f64) as u64;
+            let new_success_count = old_success_count + if success { 1 } else { 0 };
+            endpoint_stats.success_rate = new_success_count as f64 / endpoint_stats.total_requests as f64;
+        } else {
+            endpoint_stats.success_rate = if success { 1.0 } else { 0.0 };
+        }
+        
+        // Cập nhật latency trung bình
+        if endpoint_stats.total_requests > 1 {
+            let old_total_latency = endpoint_stats.average_latency * (endpoint_stats.total_requests - 1);
+            endpoint_stats.average_latency = (old_total_latency + latency_ms) / endpoint_stats.total_requests;
+        } else {
+            endpoint_stats.average_latency = latency_ms;
+        }
+        
+        // Cập nhật lỗi cuối cùng
+        if !success {
+            endpoint_stats.last_error = error;
+        }
+        
+        // Cập nhật timestamp
+        endpoint_stats.timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
+        // Cập nhật last_update
+        let mut last_update = self.last_update.write().await;
+        *last_update = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+    }
+    
+    // Vô hiệu hóa endpoint không khả dụng
+    pub fn disable_endpoint(&mut self, chain_id: u64, url: &str) -> bool {
+        let chain_id = chain_id.to_string();
+        
+        if let Some(endpoints) = self.endpoints.get_mut(&chain_id) {
+            for endpoint in endpoints.iter_mut() {
+                if endpoint.url == url {
+                    endpoint.enabled = false;
+                    return true;
+                }
+            }
+        }
+        
+        false
+    }
+    
+    // Kiểm tra sức khỏe của các endpoints
+    pub async fn check_endpoints_health(&mut self) -> Result<HashMap<String, Vec<EndpointInfo>>> {
+        let mut results = HashMap::new();
+        
+        for (chain_id, endpoints) in &mut self.endpoints {
+            for endpoint in endpoints.iter_mut() {
+                // Thực hiện kiểm tra sức khỏe
+                match check_endpoint_health(&endpoint.url).await {
+                    Ok(is_healthy) => {
+                        endpoint.enabled = is_healthy;
+                        
+                        if !is_healthy {
+                            warn!("Endpoint {} cho chain_id {} không khả dụng", endpoint.url, chain_id);
+                        }
+                    },
+                    Err(e) => {
+                        endpoint.enabled = false;
+                        warn!("Lỗi khi kiểm tra endpoint {} cho chain_id {}: {}", endpoint.url, chain_id, e);
+                    }
+                }
+            }
+            
+            // Sắp xếp lại theo priority và tính khả dụng
+            endpoints.sort_by(|a, b| {
+                if a.enabled == b.enabled {
+                    b.priority.cmp(&a.priority)
+                } else {
+                    a.enabled.cmp(&b.enabled).reverse()
+                }
+            });
+            
+            results.insert(chain_id.clone(), endpoints.clone());
+        }
+        
+        Ok(results)
+    }
+    
+    // Lấy tất cả endpoints cho một chain
+    pub fn get_endpoints_for_chain(&self, chain_id: u64) -> Vec<EndpointInfo> {
+        let chain_id = chain_id.to_string();
+        
+        if let Some(endpoints) = self.endpoints.get(&chain_id) {
+            endpoints.clone()
+        } else {
+            Vec::new()
+        }
+    }
+    
+    // Cung cấp thống kê hiện tại
+    pub async fn get_stats(&self) -> HashMap<String, EndpointStats> {
+        self.stats.read().await.clone()
+    }
+    
+    // Cung cấp thời gian cập nhật cuối cùng
+    pub async fn get_last_update(&self) -> u64 {
+        *self.last_update.read().await
+    }
+}
+
+// Hàm hỗ trợ để kiểm tra sức khỏe của một endpoint
+async fn check_endpoint_health(endpoint_url: &str) -> Result<bool> {
+    // Gửi một request đơn giản để kiểm tra xem endpoint có phản hồi không
+    let provider = Provider::<ethers::providers::Http>::try_from(endpoint_url)
+        .map_err(|e| anyhow!("Không thể kết nối tới endpoint {}: {}", endpoint_url, e))?;
+        
+    // Đặt timeout cho request
+    match tokio::time::timeout(
+        Duration::from_secs(5),
+        provider.get_block_number()
+    ).await {
+        Ok(Ok(_)) => {
+            // Endpoint phản hồi và trả về block number
+            Ok(true)
+        },
+        Ok(Err(e)) => {
+            // Endpoint phản hồi nhưng có lỗi
+            warn!("Endpoint {} trả về lỗi: {}", endpoint_url, e);
+            Ok(false)
+        },
+        Err(_) => {
+            // Endpoint không phản hồi (timeout)
+            warn!("Endpoint {} không phản hồi trong thời gian quy định", endpoint_url);
+            Ok(false)
+        }
+    }
+}
+
+// Hàm quản lý endpoints cho toàn bộ ứng dụng
+async fn start_endpoint_manager_service(endpoint_manager: Arc<RwLock<EndpointManager>>) {
+    info!("Khởi động Endpoint Manager service");
+    
+    // Chạy trong vòng lặp vô hạn
+    loop {
+        // Kiểm tra sức khỏe các endpoints mỗi 5 phút
+        tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;
+        
+        // Kiểm tra sức khỏe các endpoints
+        match endpoint_manager.write().await.check_endpoints_health().await {
+            Ok(results) => {
+                for (chain_id, endpoints) in results {
+                    let available_count = endpoints.iter().filter(|e| e.enabled).count();
+                    info!("Chain {}: {}/{} endpoints khả dụng", chain_id, available_count, endpoints.len());
+                }
+            },
+            Err(e) => {
+                error!("Lỗi khi kiểm tra sức khỏe endpoints: {}", e);
+            }
+        }
+    }
+}
 
 // Hàm để lấy ví từ cấu hình (cần được triển khai)
 fn get_wallet_from_config(config: &Config) -> Option<ethers::signers::LocalWallet> {
@@ -48,6 +303,8 @@ fn get_wallet_from_config(config: &Config) -> Option<ethers::signers::LocalWalle
 
 // Đảm bảo main.rs export module này
 pub use error::{TransactionError, classify_blockchain_error, get_recovery_info};
+// Export EndpointManager để các module khác sử dụng
+pub use self::{EndpointInfo, EndpointStats, EndpointManager};
 
 async fn start_gas_optimizer_service() {
     info!("Khởi động Gas Optimizer service");
@@ -95,7 +352,7 @@ async fn cleanup_tasks() {
         tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
         
         // Dọn dẹp rate limit
-        middleware::cleanup_rate_limits().await;
+        common::middleware::cleanup_rate_limits().await;
         
         // Dọn dẹp gas cache
         gas_optimizer::cleanup_gas_cache();
@@ -167,6 +424,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
     
+    // Khởi tạo Endpoint Manager
+    let endpoint_manager = Arc::new(RwLock::new(EndpointManager::new()));
+    
+    // Thêm endpoints từ config vào EndpointManager
+    {
+        let mut endpoint_manager = endpoint_manager.write().await;
+        
+        // Thêm các endpoint từ cấu hình
+        for (chain_id, endpoints) in &config.endpoints {
+            for (i, url) in endpoints.iter().enumerate() {
+                let endpoint_info = EndpointInfo {
+                    url: url.clone(),
+                    chain_id: *chain_id,
+                    name: format!("endpoint-{}-{}", chain_id, i+1),
+                    priority: (endpoints.len() - i) as u32, // Priority giảm dần
+                    enabled: true,
+                };
+                
+                endpoint_manager.add_endpoint(endpoint_info);
+            }
+        }
+    }
+    
+    // Bắt đầu service kiểm tra sức khỏe endpoints
+    tokio::spawn(start_endpoint_manager_service(Arc::clone(&endpoint_manager)));
+    
     // Khởi tạo các chain adapter
     if let Err(e) = init_chain_adapters().await {
         error!("Không thể khởi tạo các Chain Adapter: {}", e);
@@ -198,6 +481,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         storage: Arc::clone(&storage),
         snipebot: Arc::clone(&snipe_bot),
         user_manager: Arc::clone(&user_manager),
+        endpoint_manager: Arc::clone(&endpoint_manager), // Thêm endpoint_manager vào AppState
     });
     
     // Khởi động các dịch vụ trong thread riêng biệt

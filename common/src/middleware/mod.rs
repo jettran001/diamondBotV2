@@ -16,6 +16,24 @@ mod auth;
 mod core;
 mod rate_limit;
 
+// Re-export các module để người dùng có thể truy cập dễ dàng
+pub use auth::*;
+pub use core::*;
+pub use rate_limit::*;
+
+// Re-export UserRole để tiện sử dụng
+pub use crate::models::user::UserRole;
+
+/// Interface chung cho tất cả các middleware
+#[async_trait]
+pub trait Middleware {
+    type Error: std::error::Error + Send + Sync + 'static;
+    
+    async fn process<B>(&self, request: Request<B>, next: Next<B>) -> Result<Response, Self::Error>
+    where
+        B: Send + 'static;
+}
+
 /// Interface cho các middleware
 #[async_trait]
 pub trait Middleware: Send + Sync + 'static {
