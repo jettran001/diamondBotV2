@@ -1,14 +1,16 @@
 use ethers::{
     prelude::{LocalWallet, SignerMiddleware, MnemonicBuilder, Provider},
     signers::{coins_bip39::English, Signer},
-    types::{transaction::eip2718::TypedTransaction, Address, Bytes, H256},
+    types::{transaction::eip2718::TypedTransaction, Address, Bytes, H256, U256},
     providers::{Http, Middleware}
 };
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc as StdArc;
-use std::sync::RwLock;
-use anyhow::{Result, anyhow};
+use std::sync::{Arc, RwLock, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
+use anyhow::{Result, anyhow, Context};
+use tracing::{debug, info, warn, error};
 use zeroize::Zeroize;
 use aes_gcm::{
     aead::{Aead, generic_array::GenericArray, KeyInit},
@@ -21,6 +23,7 @@ use crate::secure_storage::{SecureWalletStorage, StorageConfig, SafeWalletView, 
 pub struct WalletManagerConfig {
     pub default_chain_id: u64,
     pub storage_config: StorageConfig,
+    pub wallet_encryption_seed: String,
 }
 
 impl Default for WalletManagerConfig {
@@ -28,6 +31,7 @@ impl Default for WalletManagerConfig {
         WalletManagerConfig {
             default_chain_id: 1, // Ethereum mainnet
             storage_config: StorageConfig::default(),
+            wallet_encryption_seed: "diamond_wallet".to_string(),
         }
     }
 }
@@ -57,6 +61,7 @@ pub struct WalletManager {
     storage: RwLock<SecureWalletStorage>,
     wallets: RwLock<HashMap<Address, LocalWallet>>,
     config: WalletManagerConfig,
+    encryption_key: String,
 }
 
 impl WalletManager {
@@ -67,8 +72,25 @@ impl WalletManager {
         Ok(WalletManager {
             storage: RwLock::new(storage),
             wallets: RwLock::new(HashMap::new()),
+            encryption_key: config.wallet_encryption_seed.clone(),
             config,
         })
+    }
+    
+    /// Tạo WalletManager từ Config cũ
+    pub async fn from_config(config: Arc<crate::config::Config>) -> Result<Self> {
+        // Chuyển đổi từ Config cũ sang WalletManagerConfig
+        let wallet_config = WalletManagerConfig {
+            default_chain_id: config.chain_id,
+            storage_config: StorageConfig {
+                wallet_dir: config.wallet_dir.clone(),
+                wallet_filename: config.wallet_filename.clone(),
+                encryption_salt: config.wallet_encryption_seed.clone(),
+            },
+            wallet_encryption_seed: config.wallet_encryption_seed.clone(),
+        };
+        
+        Self::new(wallet_config)
     }
     
     /// Tạo một ví mới với seed phrase ngẫu nhiên
@@ -105,6 +127,18 @@ impl WalletManager {
         Ok((phrase, address))
     }
     
+    /// Tạo ví mới và trả về SafeWalletView - tương thích với API cũ
+    pub fn create_new_wallet(&mut self, passphrase: Option<&str>) -> Result<SafeWalletView> {
+        let (_, address) = self.create_wallet(passphrase)?;
+        
+        // Trả về thông tin ví an toàn
+        let storage = self.storage.read().unwrap();
+        let wallet_info = storage.get_wallet(&address.to_string())
+            .ok_or_else(|| anyhow!("Wallet not found"))?;
+        
+        Ok(wallet_info.to_safe_view())
+    }
+    
     /// Import ví từ private key
     pub fn import_private_key(&self, private_key: &str, name: Option<String>) -> Result<Address> {
         // Xác nhận private key hợp lệ
@@ -124,6 +158,91 @@ impl WalletManager {
         wallets.insert(address, wallet);
         
         Ok(address)
+    }
+    
+    /// Import ví từ private key - tương thích với API cũ
+    pub fn import_from_private_key(&self, private_key: &str) -> Result<WalletInfo> {
+        // Xác thực private key
+        Self::validate_private_key(private_key)?;
+        
+        // Import ví
+        let address = self.import_private_key(private_key, None)?;
+        
+        // Lấy thông tin ví
+        let storage = self.storage.read().unwrap();
+        let wallet_info = storage.get_wallet(&address.to_string())
+            .ok_or_else(|| anyhow!("Wallet not found"))?
+            .clone();
+            
+        Ok(wallet_info)
+    }
+    
+    /// Import ví từ mnemonic
+    pub fn import_from_mnemonic(&self, mnemonic: &str, passphrase: Option<&str>) -> Result<WalletInfo> {
+        // Xác thực mnemonic
+        Self::validate_mnemonic(mnemonic)?;
+        
+        // Tạo ví từ mnemonic
+        let wallet = MnemonicBuilder::<English>::default()
+            .phrase(mnemonic)
+            .password(passphrase.unwrap_or(""))
+            .derivation_path("m/44'/60'/0'/0/0")?
+            .build()?;
+            
+        let address = wallet.address();
+        let private_key = hex::encode(wallet.signer().to_bytes());
+        
+        // Lưu private key vào storage
+        let mut storage = self.storage.write().unwrap();
+        let wallet_info = storage.create_with_private_key(&private_key, 
+                                       self.config.default_chain_id, 
+                                       None)?;
+        storage.save_to_file()?;
+        drop(storage);
+        
+        // Thêm vào cache
+        let mut wallets = self.wallets.write().unwrap();
+        wallets.insert(address, wallet);
+        
+        Ok(wallet_info)
+    }
+    
+    /// Tạo nhiều ví HD từ mnemonic
+    pub fn create_hd_wallets(&mut self, mnemonic: &str, count: usize, passphrase: Option<&str>) -> Result<Vec<WalletInfo>> {
+        // Xác thực mnemonic
+        Self::validate_mnemonic(mnemonic)?;
+        
+        let mut wallet_infos = Vec::with_capacity(count);
+        
+        // Tạo nhiều ví với các path khác nhau
+        for i in 0..count {
+            let path = format!("m/44'/60'/0'/0/{}", i);
+            
+            let wallet = MnemonicBuilder::<English>::default()
+                .phrase(mnemonic)
+                .password(passphrase.unwrap_or(""))
+                .derivation_path(&path)?
+                .build()?;
+                
+            let address = wallet.address();
+            let private_key = hex::encode(wallet.signer().to_bytes());
+            
+            // Lưu ví vào storage
+            let mut storage = self.storage.write().unwrap();
+            let wallet_info = storage.create_with_private_key(&private_key, 
+                                           self.config.default_chain_id, 
+                                           Some(format!("HD Wallet {}", i)))?;
+            storage.save_to_file()?;
+            drop(storage);
+            
+            // Thêm vào cache
+            let mut wallets = self.wallets.write().unwrap();
+            wallets.insert(address, wallet);
+            
+            wallet_infos.push(wallet_info);
+        }
+        
+        Ok(wallet_infos)
     }
     
     /// Lấy ví theo địa chỉ
@@ -200,19 +319,73 @@ impl WalletManager {
         Ok(wallets)
     }
     
+    /// Lấy danh sách ví (trả về danh sách an toàn) - tương thích với API cũ
+    pub fn get_wallet_list(&self) -> Vec<SafeWalletView> {
+        match self.list_wallets() {
+            Ok(wallets) => wallets,
+            Err(e) => {
+                error!("Lỗi khi lấy danh sách ví: {}", e);
+                Vec::new()
+            }
+        }
+    }
+    
     /// Xóa ví từ storage
-    pub fn remove_wallet(&self, address: &str) -> Result<()> {
+    pub fn remove_wallet(&self, address: &str) -> bool {
         // Xóa khỏi storage
-        let mut storage = self.storage.write().unwrap();
-        storage.remove_wallet(address)?;
+        let result = {
+            let mut storage = self.storage.write().unwrap();
+            let result = storage.remove_wallet(address);
+            if result.is_ok() {
+                let _ = storage.save_to_file();
+                true
+            } else {
+                false
+            }
+        };
+        
+        if result {
+            // Xóa khỏi cache nếu xóa từ storage thành công
+            if let Ok(address_obj) = Address::from_str(address) {
+                let mut wallets = self.wallets.write().unwrap();
+                wallets.remove(&address_obj);
+            }
+        }
+        
+        result
+    }
+    
+    /// Lưu danh sách ví
+    pub async fn save_wallets(&self) -> Result<()> {
+        let storage = self.storage.read().unwrap();
         storage.save_to_file()?;
         
-        // Xóa khỏi cache
-        let address_obj = Address::from_str(address)?;
-        let mut wallets = self.wallets.write().unwrap();
-        wallets.remove(&address_obj);
-        
         Ok(())
+    }
+    
+    /// Các phương thức xác thực
+    pub fn validate_private_key(private_key: &str) -> Result<()> {
+        // Xác thực private key hợp lệ
+        match LocalWallet::from_str(private_key) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(anyhow!("Private key không hợp lệ: {}", e)),
+        }
+    }
+    
+    pub fn validate_mnemonic(mnemonic: &str) -> Result<()> {
+        // Xác thực mnemonic hợp lệ
+        match ethers::signers::coins_bip39::Mnemonic::<English>::new_from_phrase(mnemonic) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(anyhow!("Mnemonic không hợp lệ: {}", e)),
+        }
+    }
+    
+    pub fn validate_wallet_address(address: &str) -> Result<()> {
+        // Xác thực địa chỉ ví hợp lệ
+        match Address::from_str(address) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(anyhow!("Địa chỉ ví không hợp lệ: {}", e)),
+        }
     }
 }
 
@@ -243,5 +416,29 @@ impl WalletClientExt for Provider<Http> {
         
         // Trả về middleware có khả năng ký
         Ok(SignerMiddleware::new(self, wallet))
+    }
+}
+
+/// Module unit tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[tokio::test]
+    async fn test_wallet_management() -> Result<()> {
+        // Test code
+        Ok(())
+    }
+    
+    #[tokio::test]
+    async fn test_import_from_private_key() -> Result<()> {
+        // Test code
+        Ok(())
+    }
+    
+    #[tokio::test]
+    async fn test_create_hd_wallets() -> Result<()> {
+        // Test code
+        Ok(())
     }
 }

@@ -1,9 +1,17 @@
+// External imports
 use ethers::types::{Address, U256};
+use ethers::prelude::*;
 use serde::{Serialize, Deserialize};
+
+// Standard library imports
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::Mutex;
 use tracing::{info, warn};
+
+// Internal imports
+pub mod ai_training;
 use crate::error::TransactionError;
 use crate::types::{
     TradingStrategy, 
@@ -14,12 +22,15 @@ use crate::types::{
     AIDecision
 };
 use crate::risk_analyzer::TokenRiskAnalysis;
-use async_trait::async_trait;
-use std::sync::Arc;
 use crate::mempool::MempoolWatcher;
 use crate::MonteEquilibrium::GameTheoryOptimizer as MonteEquilibriumOptimizer;
 use crate::trade::trade_logic::TradeManager;
 use crate::chain_adapters::ChainAdapter;
+
+// Third-party imports
+use async_trait::async_trait;
+use self::ai_training::realtime::rl_agent::TradingAgent;
+use self::ai_training::realtime::sentiment::{SentimentAnalyzer, SentimentScore};
 
 /// Các dự đoán AI
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,12 +75,15 @@ pub struct AIAnalysisResult {
     pub recommendation: String,
 }
 
+/// Mô-đun AI chính của hệ thống
 pub struct AIModule {
     model: AIModelEnum,
     config: AIModuleConfig,
     mempool_tracker: Option<Arc<Mutex<MempoolWatcher>>>,
     monte_equilibrium: Option<Arc<MonteEquilibriumOptimizer>>,
     trade_manager: Option<Arc<Mutex<TradeManager<dyn ChainAdapter + Send + Sync>>>>,
+    trading_agent: Option<Arc<Mutex<TradingAgent>>>,
+    sentiment_analyzer: Option<Arc<Mutex<SentimentAnalyzer>>>,
     bot_mode: BotMode,
     trade_history_db: Option<Arc<Mutex<TradeHistoryDB>>>,
 }
@@ -94,7 +108,7 @@ pub trait AIModel: Send + Sync {
     async fn predict(&self, features: HashMap<String, f64>) -> Result<AIPrediction, Box<dyn std::error::Error + Send + Sync>>;
 }
 
-// Thêm một enum để bọc các loại AIModel
+// Enum để bọc các loại AIModel
 #[derive(Clone)]
 pub enum AIModelEnum {
     SimpleModel(Arc<SimpleAIModel>),
@@ -114,8 +128,10 @@ impl AIModel for AIModelEnum {
     }
 }
 
-// Cấu trúc SimpleAIModel
+// Triển khai cụ thể của các model
 pub struct SimpleAIModel;
+pub struct NeuralAIModel;
+pub struct DefaultAIModel;
 
 #[async_trait]
 impl AIModel for SimpleAIModel {
@@ -125,9 +141,6 @@ impl AIModel for SimpleAIModel {
     }
 }
 
-// Cấu trúc NeuralAIModel
-pub struct NeuralAIModel;
-
 #[async_trait]
 impl AIModel for NeuralAIModel {
     async fn predict(&self, features: HashMap<String, f64>) -> Result<AIPrediction, Box<dyn std::error::Error + Send + Sync>> {
@@ -135,9 +148,6 @@ impl AIModel for NeuralAIModel {
         Ok(AIPrediction::default())
     }
 }
-
-// Cấu trúc DefaultAIModel
-pub struct DefaultAIModel;
 
 #[async_trait]
 impl AIModel for DefaultAIModel {
@@ -161,6 +171,8 @@ impl AIModule {
             mempool_tracker,
             monte_equilibrium,
             trade_manager,
+            trading_agent: None,
+            sentiment_analyzer: None,
             bot_mode: BotMode::Manual,
             trade_history_db: None,
         }
@@ -168,6 +180,14 @@ impl AIModule {
 
     pub fn set_bot_mode(&mut self, mode: BotMode) {
         self.bot_mode = mode;
+    }
+    
+    pub fn set_trading_agent(&mut self, agent: Arc<Mutex<TradingAgent>>) {
+        self.trading_agent = Some(agent);
+    }
+    
+    pub fn set_sentiment_analyzer(&mut self, analyzer: Arc<Mutex<SentimentAnalyzer>>) {
+        self.sentiment_analyzer = Some(analyzer);
     }
     
     pub async fn analyze_token(
@@ -426,40 +446,20 @@ impl AIModule {
         Ok(result)
     }
 
-    // Phương thức này không có trong mã ban đầu, thêm để phù hợp với lời gọi trong execute_ai_recommendation
-    async fn calculate_optimal_position_size(&self, token_address: &str, risk_reward: f64) -> Result<String, Box<dyn std::error::Error>> {
+    // Các phương thức hỗ trợ khác - thêm theo yêu cầu
+    async fn determine_optimal_strategy(&self, prediction: &AIPrediction, token_address: &str) -> Result<TradingStrategy, Box<dyn std::error::Error>> {
+        // Loại bỏ trùng lặp với TradingAgent
+        if let Ok(agent_strategy) = self.get_agent_prediction(token_address).await {
+            return Ok(agent_strategy);
+        }
+        
+        // Fallback nếu không thể sử dụng TradingAgent
+        Ok(prediction.suggested_strategy.clone())
+    }
+    
+    async fn calculate_optimal_position_size(&self, token_address: &str, confidence: f64) -> Result<String, Box<dyn std::error::Error>> {
         // Đây là phương thức tạm thời
         Ok("0.01".to_string())
-    }
-
-    async fn determine_optimal_strategy(&self, prediction: &AIPrediction, token_address: &str) -> Result<TradingStrategy, Box<dyn std::error::Error>> {
-        // Dựa vào kết quả dự đoán để chọn chiến lược tối ưu
-        let mempool_activity = self.is_high_mempool_activity(token_address).await?;
-        
-        match &prediction.suggested_strategy {
-            TradingStrategy::Accumulate if prediction.confidence > 0.8 => {
-                Ok(TradingStrategy::Accumulate)
-            },
-            TradingStrategy::LimitedBuy if prediction.confidence > 0.7 => {
-                if mempool_activity {
-                    Ok(TradingStrategy::MempoolFrontrun)
-                } else {
-                    Ok(TradingStrategy::LimitedBuy)
-                }
-            },
-            TradingStrategy::SandwichAttack if prediction.confidence > 0.75 => {
-                // Thêm kiểm tra xem có nạn nhân tiềm năng không
-                if self.find_potential_sandwich_victim(token_address).await?.is_some() {
-                    Ok(TradingStrategy::SandwichAttack)
-                } else {
-                    Ok(TradingStrategy::LimitedBuy)
-                }
-            },
-            TradingStrategy::Arbitrage if prediction.confidence > 0.8 => {
-                Ok(TradingStrategy::Arbitrage)
-            },
-            _ => Ok(TradingStrategy::Monitor),
-        }
     }
 
     async fn is_high_mempool_activity(&self, token_address: &str) -> Result<bool, Box<dyn std::error::Error>> {
@@ -555,10 +555,112 @@ impl AIModule {
         
         // Chuyển đổi AIAnalysisResult thành AIDecision để tương thích ngược
         Ok(AIDecision {
-            should_buy: result.confidence > 0.7,
+            token_address: token_address.to_string(),
+            action: TradingStrategy::from_str(&result.recommendation).unwrap_or(TradingStrategy::Monitor),
+            position_size: "0.01".to_string(), // giá trị mặc định
             confidence: result.confidence,
-            prediction: result.recommendation,
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
         })
+    }
+
+    // Lấy quyết định giao dịch cho token
+    pub async fn get_trade_decision(&self, token_address: &str) -> Result<AIDecision, Box<dyn std::error::Error>> {
+        // Xây dựng quyết định giao dịch dựa trên phân tích AI
+        // (Đây là method mới được thêm vào để hỗ trợ AICoordinator)
+        
+        let features = self.collect_token_features(token_address).await?;
+        let prediction = self.model.predict(features).await?;
+        
+        let strategy = self.determine_optimal_strategy(&prediction, token_address).await?;
+        let position_size = self.calculate_optimal_position_size(token_address, prediction.confidence).await?;
+        
+        let decision = AIDecision {
+            token_address: token_address.to_string(),
+            action: strategy,
+            position_size,
+            confidence: prediction.confidence,
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        };
+        
+        Ok(decision)
+    }
+    
+    // Tích hợp với TradingAgent từ ai_training
+    pub async fn get_agent_prediction(&self, token_address: &str) -> Result<TradingStrategy, Box<dyn std::error::Error>> {
+        if let Some(agent) = &self.trading_agent {
+            // Timeout để tránh treo
+            match tokio::time::timeout(
+                Duration::from_secs(2),
+                async {
+                    if let Ok(guard) = agent.try_lock() {
+                        // Giả định MarketState có thể được tạo từ token_address
+                        // Đây là điểm tích hợp với ai_training/realtime/rl_agent.rs
+                        // Chỉ sử dụng các hàm từ TradingAgent mà không trùng lặp code
+                        let state = MarketState::from_token_address(token_address);
+                        let action = guard.predict_action(&state);
+                        return Ok(TradingStrategy::from(action));
+                    }
+                    Err("Không thể lấy lock cho TradingAgent".into())
+                }
+            ).await {
+                Ok(result) => result,
+                Err(_) => Err("Timeout khi truy cập TradingAgent".into())
+            }
+        } else {
+            Err("TradingAgent không khả dụng".into())
+        }
+    }
+    
+    // Tích hợp với SentimentAnalyzer từ ai_training
+    pub async fn analyze_sentiment(&self, token_address: &str) -> Result<f64, Box<dyn std::error::Error>> {
+        if let Some(analyzer) = &self.sentiment_analyzer {
+            // Timeout để tránh treo
+            match tokio::time::timeout(
+                Duration::from_secs(2),
+                async {
+                    if let Ok(guard) = analyzer.try_lock() {
+                        // Đây là điểm tích hợp với ai_training/realtime/sentiment.rs
+                        // Chỉ sử dụng các hàm từ SentimentAnalyzer mà không trùng lặp code
+                        let sentiment_score = guard.analyze_token(token_address)?;
+                        return Ok(sentiment_score.score);
+                    }
+                    Err("Không thể lấy lock cho SentimentAnalyzer".into())
+                }
+            ).await {
+                Ok(result) => result,
+                Err(_) => Err("Timeout khi truy cập SentimentAnalyzer".into())
+            }
+        } else {
+            Err("SentimentAnalyzer không khả dụng".into())
+        }
+    }
+    
+    // Thu thập các features cho token
+    async fn collect_token_features(&self, token_address: &str) -> Result<HashMap<String, f64>, Box<dyn std::error::Error>> {
+        let mut features = HashMap::new();
+        
+        // Thêm dữ liệu mempool
+        let mempool_data = self.get_mempool_data(token_address).await;
+        for (key, value) in mempool_data {
+            features.insert(key, value);
+        }
+        
+        // Thêm sentiment nếu khả dụng
+        if let Ok(sentiment) = self.analyze_sentiment(token_address).await {
+            features.insert("sentiment_score".to_string(), sentiment);
+        }
+        
+        // Thêm các features khác (có thể mở rộng sau)
+        features.insert("token_address_hash".to_string(), 
+            token_address.chars().fold(0.0, |acc, c| acc + (c as u8 as f64)));
+        
+        Ok(features)
     }
 }
 
@@ -578,6 +680,8 @@ impl Clone for AIModule {
             mempool_tracker: self.mempool_tracker.clone(),
             monte_equilibrium: self.monte_equilibrium.clone(),
             trade_manager: self.trade_manager.clone(),
+            trading_agent: self.trading_agent.clone(),
+            sentiment_analyzer: self.sentiment_analyzer.clone(),
             bot_mode: self.bot_mode.clone(),
             trade_history_db: self.trade_history_db.clone(),
         }
@@ -586,3 +690,120 @@ impl Clone for AIModule {
 
 /// Cấu trúc để lưu trữ lịch sử giao dịch
 pub struct TradeHistoryDB;
+
+/// Điều phối viên AI - quản lý mọi tương tác với AI và caching kết quả
+pub struct AICoordinator {
+    ai_module: Arc<Mutex<AIModule>>,
+    confidence_threshold: f64,
+    auto_trade_enabled: bool,
+    last_decisions: HashMap<String, (AIDecision, u64)>, // (token_address, (decision, timestamp))
+}
+
+impl AICoordinator {
+    pub fn new(ai_module: Arc<Mutex<AIModule>>, confidence_threshold: f64, auto_trade_enabled: bool) -> Self {
+        Self {
+            ai_module,
+            confidence_threshold,
+            auto_trade_enabled,
+            last_decisions: HashMap::new(),
+        }
+    }
+    
+    // Lấy quyết định giao dịch từ AI
+    pub async fn get_ai_trade_decision(&self, token_address: &str) -> Result<AIDecision, Box<dyn std::error::Error>> {
+        // Kiểm tra cache
+        if let Some((decision, timestamp)) = self.last_decisions.get(token_address) {
+            // Kiểm tra thời gian hiệu lực
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            
+            // Nếu quyết định còn hiệu lực (chưa quá 5 phút), trả về từ cache
+            if now - timestamp < 300 {
+                return Ok(decision.clone());
+            }
+        }
+        
+        // Lấy quyết định mới từ AI module
+        let ai_module = self.ai_module.lock().await;
+        let decision = ai_module.get_trade_decision(token_address).await?;
+        
+        // Lưu vào cache
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        
+        // Clone decision và token_address để tránh borrowing issues
+        let token_address_owned = token_address.to_string();
+        let decision_clone = decision.clone();
+        
+        // Thêm vào cache
+        self.last_decisions.insert(token_address_owned, (decision_clone, now));
+        
+        Ok(decision)
+    }
+    
+    // Kiểm tra nếu nên tự động giao dịch
+    pub fn should_auto_trade(&self, decision: &AIDecision) -> bool {
+        self.auto_trade_enabled && decision.confidence >= self.confidence_threshold
+    }
+    
+    // Phân tích token mới
+    pub async fn analyze_new_token(
+        &self, 
+        token_address: &str, 
+        status: &TokenStatus, 
+        risk_analysis: Option<&TokenRiskAnalysis>
+    ) -> Result<AIDecision, Box<dyn std::error::Error>> {
+        let ai_module = self.ai_module.lock().await;
+        ai_module.analyze_new_token(token_address, status, risk_analysis).await
+    }
+    
+    // Cập nhật cấu hình
+    pub fn update_config(&mut self, confidence_threshold: f64, auto_trade_enabled: bool) {
+        self.confidence_threshold = confidence_threshold;
+        self.auto_trade_enabled = auto_trade_enabled;
+    }
+}
+
+// Cho mục đích tích hợp - các cấu trúc này sẽ được implementation từ files trong ai_training
+struct MarketState {
+    // Các trường cần thiết sẽ được implement
+}
+
+impl MarketState {
+    fn from_token_address(token_address: &str) -> Self {
+        Self {}
+    }
+}
+
+struct TradeAction;
+
+impl TradingStrategy {
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "buy" | "Buy" | "pump_potential" => Some(TradingStrategy::Buy),
+            "sell" | "Sell" => Some(TradingStrategy::Sell),
+            "monitor" | "Monitor" => Some(TradingStrategy::Monitor),
+            _ => None,
+        }
+    }
+    
+    fn from(action: TradeAction) -> Self {
+        // Đây là stub, sẽ được implement sau
+        TradingStrategy::Monitor
+    }
+}
+
+struct SentimentScore {
+    score: f64,
+}
+
+pub mod monte_carlo;
+pub mod equilibrium;
+
+// Re-export các components quan trọng để tiện sử dụng
+pub use monte_carlo::{MonteCarloEngine, SimulationRun, MarketModel};
+pub use equilibrium::{EquilibriumAnalyzer, EquilibriumAnalysis, Strategy, Action, GameOutcome, Player};

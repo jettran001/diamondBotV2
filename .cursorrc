@@ -467,214 +467,562 @@
   },
   
   "modules": {
-    "*": {
-      "chain_adapters": {
-        "description": "Các adapter cho các blockchain khác nhau",
-        "dependencies": [
-          "common/src/chain_adapter.rs",
-          "common/src/types.rs",
-          "common/src/error.rs"
-        ],
-        "rules": {
-          "mod_resolution": "Mỗi mod xxx; phải dẫn tới đúng file/module tương ứng (xxx.rs hoặc xxx/mod.rs)",
-          "violation_consequence": "Không được phép merge nếu mod không resolve được"
+    "core": {
+      "components": {
+        "common": {
+          "description": "Các thành phần chung được sử dụng bởi tất cả các module",
+          "files": [
+            "src/lib.rs",
+            "src/types.rs",
+            "src/utils.rs", 
+            "src/error.rs",
+            "src/chain_adapter.rs",
+            "src/worker.rs",
+            "src/validator.rs",
+            "src/executor.rs",
+            "src/scheduler.rs",
+            "src/state_manager.rs",
+            "src/task_manager.rs",
+            "src/config.rs",
+            "src/event_handler.rs",
+            "src/security.rs",
+            "src/logger.rs",
+            "src/metrics.rs",
+            "src/cache.rs",
+            "src/equilibrium.rs", 
+            "src/retry_policy.rs",
+            "src/diamond_manager.rs",
+            "src/ai.rs",
+            "src/monte_equilibrium.rs",
+            "src/subscription.rs",
+            "src/user.rs",
+            "src/models/mod.rs",
+            "src/models/transaction.rs",
+            "src/models/user.rs", 
+            "src/models/block.rs",
+            "src/models/wallet.rs",
+            "src/models/chain.rs",
+            "src/middleware/mod.rs",
+            "src/middleware/middleware.rs",
+            "src/middleware/auth.rs",
+            "src/middleware/core.rs",
+            "src/middleware/rate_limit.rs",
+            "src/network/mod.rs",
+            "src/network/models.rs",
+            "src/network/error.rs",
+            "src/network/server.rs",
+            "src/network/types.rs",
+            "src/network/utils.rs",
+            "src/network/config.rs",
+            "src/network/message.rs",
+            "src/network/lib.rs"
+          ],
+          "dependencies": []
+        },
+        "blockchain": {
+          "description": "Tương tác với blockchain, Quản lý EIP-2535",
+          "files": [
+            "src/lib.rs",
+            "src/core/mod.rs",
+            "src/core/contract_manager.rs",
+            "src/core/transaction.rs",
+            "src/core/token_info.rs",
+            "src/abi/abis.rs",
+            "src/abi/mod.rs",
+            "src/abi/pair.json",
+            "src/abi/factory.json",
+            "src/abi/erc20.json",
+            "src/abi/router.json",
+            "src/mining/src/lib.rs",
+            "src/mining/README.md",
+            "src/mining/Cargo.toml",
+            "src/grpc/mod.rs",
+            "src/farming/src/lib.rs",
+            "src/farming/README.md",
+            "src/farming/Cargo.toml",
+            "src/diamond_token/src/lib.rs",
+            "src/diamond_token/src/module_manager.rs",
+            "src/diamond_token/src/bridge.rs",
+            "src/diamond_token/src/supply_tracker.rs",
+            "src/diamond_token/README.md",
+            "src/diamond_token/Cargo.toml",
+            "src/depin/mod.rs",
+            "src/crosschain/cross_chain.rs"
+          ],
+          "dependencies": ["common"]
+        },
+        "wallet": {
+          "description": "Quản lý ví an toàn",
+          "files": [
+            "src/**/*.rs",
+            "src/**/mod.rs",
+            "src/**/lib.rs",
+            "src/**/secure_storage.rs",
+            "src/**/wallet.rs",
+            "src/**/farm.rs",
+            "src/**/defi.rs",
+            "src/**/config.rs"
+          ],
+          "dependencies": ["common"]
+        },
+        "network": {
+          "description": "Kết nối mạng và RPC",
+          "dependencies": [
+            "common/src/network.rs",
+            "common/src/retry_policy.rs",
+            "common/src/error.rs"
+          ]
+        },
+        "snipebot": {
+          "description": "Core logic của bot",
+          "dependencies": [
+            "common/src/task_manager.rs",
+            "common/src/worker.rs",
+            "common/src/scheduler.rs",
+            "common/src/executor.rs",
+            "snipebot/src/trade/trade_logic.rs",
+            "snipebot/src/snipebot.rs",
+            "snipebot/src/trade/token_status.rs",
+            "snipebot/src/config.rs", 
+            "snipebot/src/api.rs",
+            "snipebot/src/types.rs",
+            "snipebot/src/trade/auto_tuning.rs",
+            "snipebot/src/storage.rs",
+            "snipebot/src/rate_limit.rs",
+            "snipebot/src/trade/mempool.rs",
+            "snipebot/src/trade/gas_optimizer.rs",
+            "snipebot/src/risk_analyzer.rs",
+            "wallet/src/wallet.rs",
+            "snipebot/src/blockchain.rs",
+            "snipebot/src/AIModule.rs",
+            "snipebot/src/connection_manager.rs",
+            "ai_modules/monte_carlo.rs",
+            "ai_modules/equilibrium.rs",
+            "snipebot/src/flashbots.rs",
+            "snipebot/src/chain_adapters/base.rs",
+            "snipebot/src/chain_adapters/connection_pool.rs",
+            "snipebot/src/chain_adapters/mod.rs",
+            "snipebot/src/ai_coordinator.rs",
+            "snipebot/src/health_monitor.rs",
+            "snipebot/src/module_manager.rs",
+            "snipebot/src/trade/trade_executor.rs",
+            "common/src/cache.rs",
+            "common/src/subscription.rs",
+            "common/src/retry_policy.rs"
+          ]
+        },
+        "common": {
+          "description": "Các tiện ích và cấu trúc dữ liệu chung",
+          "dependencies": [
+            "common/src/types.rs",
+            "common/src/utils.rs",
+            "common/src/chain_adapter.rs",
+            "common/src/lib.rs",
+            "common/src/error.rs",
+            "common/src/worker.rs",
+            "common/src/validator.rs",
+            "common/src/executor.rs",
+            "common/src/scheduler.rs",
+            "common/src/state_manager.rs",
+            "common/src/task_manager.rs",
+            "common/src/config.rs",
+            "common/src/event_handler.rs",
+            "common/src/security.rs",
+            "common/src/logger.rs",
+            "common/src/metrics.rs",
+            "common/src/cache.rs",
+            "common/src/equilibrium.rs",
+            "common/src/retry_policy.rs",
+            "common/src/diamond_manager.rs",
+            "common/src/ai.rs",
+            "common/src/monte_equilibrium.rs",
+            "common/src/subscription.rs",
+            "common/src/user.rs",
+            "common/src/models/mod.rs", 
+            "common/src/models/transaction.rs",
+            "common/src/models/user.rs",
+            "common/src/models/block.rs",
+            "common/src/models/wallet.rs",
+            "common/src/models/chain.rs",
+            "common/src/middleware/mod.rs",
+            "common/src/middleware/middleware.rs",
+            "common/src/middleware/auth.rs",
+            "common/src/middleware/core.rs",
+            "common/src/middleware/rate_limit.rs",
+            "common/src/network/mod.rs",
+            "common/src/network/models.rs",
+            "common/src/network/error.rs",
+            "common/src/network/server.rs",
+            "common/src/network/types.rs",
+            "common/src/network/utils.rs",
+            "common/src/network/config.rs",
+            "common/src/network/message.rs",
+            "common/src/network/lib.rs"
+          ]
+        },
+        "middleware": {
+          "description": "Các middleware cho API",
+          "dependencies": [
+            "common/src/middleware.rs",
+            "common/src/error.rs"
+          ]
+        },
+        "ai": {
+          "description": "Các mô hình AI và phân tích dữ liệu",
+          "dependencies": [
+            "common/src/types.rs",
+            "common/src/models.rs",
+            "common/src/error.rs",
+            "ai_modules/monte_carlo.rs",
+            "ai_modules/equilibrium.rs",
+            "ai_modules/mod.rs",
+            "ai_modules/ai_training/mod.rs",
+            "ai_modules/ai_training/realtime/mod.rs",
+            "ai_modules/ai_training/realtime/rl_agent.rs",
+            "ai_modules/ai_training/realtime/sentiment.rs",
+            "ai_modules/ai_training/longtime/**/*.rs"
+          ]
+        },
+        "diamond_manager": {
+          "description": "Quản trị hệ thống và hợp đồng Diamond",
+          "dependencies": [
+            "common/src/chain_adapter.rs",
+            "common/src/types.rs",
+            "common/src/error.rs"
+          ]
+        },
+        "connections": {
+          "description": "Quản lý các kết nối RPC",
+          "dependencies": [
+            "common/src/network.rs",
+            "common/src/retry_policy.rs",
+            "common/src/error.rs"
+          ]
+        },
+        "utils": {
+          "description": "Tiện ích và hàm hỗ trợ",
+          "dependencies": [
+            "common/src/utils.rs",
+            "common/src/types.rs",
+            "common/src/error.rs"
+          ]
+        },
+        "error_handling": {
+          "description": "Xử lý lỗi và retry",
+          "dependencies": [
+            "common/src/error.rs",
+            "common/src/retry_policy.rs",
+            "common/src/error_handler.rs"
+          ]
+        },
+        "api": {
+          "description": "RESTful API endpoints",
+          "dependencies": [
+            "common/src/types.rs",
+            "common/src/models.rs",
+            "common/src/error.rs"
+          ]
+        },
+        "risk_analyzer": {
+          "description": "Phân tích rủi ro token",
+          "dependencies": [
+            "common/src/risk_analyzer.rs",
+            "common/src/types.rs",
+            "common/src/error.rs",
+            "snipebot/src/trade/risk_analyzer.rs"
+          ]
+        },
+        "MonteEquilibrium": {
+          "description": "Tối ưu hóa giao dịch theo lý thuyết trò chơi",
+          "dependencies": [
+            "common/src/equilibrium.rs",
+            "common/src/types.rs",
+            "common/src/error.rs",
+            "ai_modules/monte_carlo.rs",
+            "ai_modules/equilibrium.rs"
+          ]
         }
-      },
-      "wallet": {
-        "description": "Quản lý ví và khóa bảo mật",
-        "dependencies": [
-          "common/src/security.rs",
-          "common/src/types.rs",
-          "common/src/error.rs",
-          "wallet/src/secure_storage.rs",
-          "wallet/src/wallet.rs",
-          "wallet/src/farm.rs",
-          "wallet/src/defi.rs",
-          "wallet/src/config.rs"
-        ]
-      },
-      "blockchain": {
-        "description": "Tương tác với blockchain",
-        "dependencies": [
-          "common/src/chain_adapter.rs",
-          "common/src/network.rs",
-          "common/src/types.rs",
-          "blockchain/src/lib.rs",
-          "blockchain/src/mining/",
-          "blockchain/src/grpc/",
-          "blockchain/src/farming/",
-          "blockchain/src/diamond_token/",
-          "blockchain/src/depin/",
-          "blockchain/src/crosschain/",
-          "blockchain/src/abi/",
-          "blockchain/src/marketplace/",
-          "blockchain/src/nft/"
-        ]
-      },
-      "network": {
-        "description": "Kết nối mạng và RPC",
-        "dependencies": [
-          "common/src/network.rs",
-          "common/src/retry_policy.rs",
-          "common/src/error.rs"
-        ]
-      },
-      "snipebot": {
-        "description": "Bot giao dịch tự động",
-        "dependencies": [
-          "common/src/task_manager.rs",
-          "common/src/worker.rs",
-          "common/src/scheduler.rs",
-          "common/src/executor.rs",
-          "snipebot/src/trade/trade_logic.rs",
-          "snipebot/src/snipebot.rs",
-          "snipebot/src/trade/token_status.rs",
-          "snipebot/src/config.rs", 
-          "snipebot/src/api.rs",
-          "snipebot/src/types.rs",
-          "snipebot/src/auto_tuning.rs",
-          "snipebot/src/storage.rs",
-          "snipebot/src/rate_limit.rs",
-          "snipebot/src/trade/mempool.rs",
-          "snipebot/src/trade/gas_optimizer.rs",
-          "snipebot/src/risk_analyzer.rs",
-          "snipebot/src/wallet_manager.rs",
-          "snipebot/src/blockchain.rs",
-          "snipebot/src/AIModule.rs",
-          "snipebot/src/connection_manager.rs",
-          "snipebot/src/trade/MonteEquilibrium.rs",
-          "snipebot/src/flashbots.rs",
-          "snipebot/src/chain_adapters/base.rs",
-          "snipebot/src/chain_adapters/connection_pool.rs",
-          "snipebot/src/chain_adapters/mod.rs",
-          "snipebot/src/ai_coordinator.rs",
-          "snipebot/src/health_monitor.rs",
-          "snipebot/src/module_manager.rs",
-          "snipebot/src/trade_executor.rs",
-          "common/src/cache.rs",
-          "common/src/subscription.rs",
-          "common/src/retry_policy.rs"
-        ]
-      },
-      "common": {
-        "description": "Các tiện ích và cấu trúc dữ liệu chung",
-        "dependencies": [
-          "common/src/types.rs",
-          "common/src/utils.rs",
-          "common/src/chain_adapter.rs",
-          "common/src/lib.rs",
-          "common/src/error.rs",
-          "common/src/worker.rs",
-          "common/src/validator.rs",
-          "common/src/executor.rs",
-          "common/src/scheduler.rs",
-          "common/src/state_manager.rs",
-          "common/src/task_manager.rs",
-          "common/src/config.rs",
-          "common/src/event_handler.rs",
-          "common/src/security.rs",
-          "common/src/logger.rs",
-          "common/src/metrics.rs",
-          "common/src/cache.rs",
-          "common/src/equilibrium.rs",
-          "common/src/retry_policy.rs",
-          "common/src/diamond_manager.rs",
-          "common/src/ai.rs",
-          "common/src/monte_equilibrium.rs",
-          "common/src/subscription.rs",
-          "common/src/user.rs",
-          "common/src/models/mod.rs", 
-          "common/src/models/transaction.rs",
-          "common/src/models/user.rs",
-          "common/src/models/block.rs",
-          "common/src/models/wallet.rs",
-          "common/src/models/chain.rs",
-          "common/src/middleware/mod.rs",
-          "common/src/middleware/middleware.rs",
-          "common/src/middleware/auth.rs",
-          "common/src/middleware/core.rs",
-          "common/src/middleware/rate_limit.rs",
-          "common/src/network/mod.rs",
-          "common/src/network/models.rs",
-          "common/src/network/error.rs",
-          "common/src/network/server.rs",
-          "common/src/network/types.rs",
-          "common/src/network/utils.rs",
-          "common/src/network/config.rs",
-          "common/src/network/message.rs",
-          "common/src/network/lib.rs"
-        ]
-      },
-      "middleware": {
-        "description": "Các middleware cho API",
-        "dependencies": [
-          "common/src/middleware.rs",
-          "common/src/error.rs"
-        ]
-      },
-      "ai": {
-        "description": "Các mô hình AI và phân tích dữ liệu",
-        "dependencies": [
-          "common/src/types.rs",
-          "common/src/models.rs",
-          "common/src/error.rs"
-        ]
-      },
-      "diamond_manager": {
-        "description": "Quản trị hệ thống và hợp đồng Diamond",
-        "dependencies": [
-          "common/src/chain_adapter.rs",
-          "common/src/types.rs",
-          "common/src/error.rs"
-        ]
-      },
-      "connections": {
-        "description": "Quản lý các kết nối RPC",
-        "dependencies": [
-          "common/src/network.rs",
-          "common/src/retry_policy.rs",
-          "common/src/error.rs"
-        ]
-      },
-      "utils": {
-        "description": "Tiện ích và hàm hỗ trợ",
-        "dependencies": [
-          "common/src/utils.rs",
-          "common/src/types.rs",
-          "common/src/error.rs"
-        ]
-      },
-      "error_handling": {
-        "description": "Xử lý lỗi và retry",
-        "dependencies": [
-          "common/src/error.rs",
-          "common/src/retry_policy.rs",
-          "common/src/error_handler.rs"
-        ]
-      },
-      "api": {
-        "description": "RESTful API endpoints",
-        "dependencies": [
-          "common/src/types.rs",
-          "common/src/models.rs",
-          "common/src/error.rs"
-        ]
-      },
-      "risk_analyzer": {
-        "description": "Phân tích rủi ro token",
-        "dependencies": [
-          "common/src/risk_analyzer.rs",
-          "common/src/types.rs",
-          "common/src/error.rs"
-        ]
-      },
-      "MonteEquilibrium": {
-        "description": "Tối ưu hóa giao dịch theo lý thuyết trò chơi",
-        "dependencies": [
-          "common/src/equilibrium.rs",
-          "common/src/types.rs",
-          "common/src/error.rs"
-        ]
+      }
+    },
+    "blockchain": {
+      "*": {
+        "core": {
+          "description": "Core blockchain functionality",
+          "files": [
+            "src/core/mod.rs",
+            "src/core/contract_manager.rs",
+            "src/core/transaction.rs",
+            "src/core/token_info.rs"
+          ],
+          "dependencies": ["common/types", "common/models"]
+        },
+        "abi": {
+          "description": "Blockchain ABI definitions and handling",
+          "files": [
+            "src/abi/abis.rs",
+            "src/abi/mod.rs",
+            "src/abi/pair.json",
+            "src/abi/factory.json",
+            "src/abi/erc20.json",
+            "src/abi/router.json"
+          ],
+          "dependencies": ["common/types"]
+        },
+        "mining": {
+          "description": "Mining functionality",
+          "files": [
+            "src/mining/src/lib.rs",
+            "src/mining/README.md",
+            "src/mining/Cargo.toml"
+          ],
+          "dependencies": ["core", "common/types"]
+        },
+        "grpc": {
+          "description": "gRPC interfaces",
+          "files": [
+            "src/grpc/mod.rs"
+          ],
+          "dependencies": ["core", "common/network"]
+        },
+        "farming": {
+          "description": "Farming functionality",
+          "files": [
+            "src/farming/src/lib.rs",
+            "src/farming/README.md",
+            "src/farming/Cargo.toml"
+          ],
+          "dependencies": ["core", "common/types"]
+        },
+        "diamond_token": {
+          "description": "Diamond token handling",
+          "files": [
+            "src/diamond_token/src/lib.rs",
+            "src/diamond_token/src/module_manager.rs",
+            "src/diamond_token/src/bridge.rs",
+            "src/diamond_token/src/supply_tracker.rs",
+            "src/diamond_token/README.md",
+            "src/diamond_token/Cargo.toml"
+          ],
+          "dependencies": ["core", "common/types"]
+        },
+        "depin": {
+          "description": "DePIN functionality",
+          "files": [
+            "src/depin/mod.rs"
+          ],
+          "dependencies": ["core", "common/types"]
+        },
+        "crosschain": {
+          "description": "Cross-chain functionality",
+          "files": [
+            "src/crosschain/cross_chain.rs"
+          ],
+          "dependencies": ["core", "common/types"]
+        }
+      }
+    },
+    "wallet": {
+      "*": {
+        "wallet": {
+          "description": "Quản lý ví",
+          "files": [
+            "src/**/wallet.rs",
+            "src/**/wallet/**/*.rs",
+            "src/**/wallet_manager.rs",
+            "src/**/wallet_utils.rs"
+          ],
+          "dependencies": ["common/security", "common/types"]
+        },
+        "key": {
+          "description": "Quản lý khóa",
+          "files": [
+            "src/**/key.rs",
+            "src/**/key/**/*.rs",
+            "src/**/key_manager.rs",
+            "src/**/key_generator.rs"
+          ],
+          "dependencies": ["common/security", "common/types"]
+        },
+        "account": {
+          "description": "Quản lý tài khoản",
+          "files": [
+            "src/**/account.rs",
+            "src/**/account/**/*.rs",
+            "src/**/account_manager.rs",
+            "src/**/account_validator.rs"
+          ],
+          "dependencies": ["common/types", "common/models"]
+        },
+        "address": {
+          "description": "Quản lý địa chỉ",
+          "files": [
+            "src/**/address.rs",
+            "src/**/address/**/*.rs",
+            "src/**/address_validator.rs",
+            "src/**/address_generator.rs"
+          ],
+          "dependencies": ["common/types"]
+        },
+        "balance": {
+          "description": "Quản lý số dư",
+          "files": [
+            "src/**/balance.rs",
+            "src/**/balance/**/*.rs",
+            "src/**/balance_checker.rs",
+            "src/**/balance_tracker.rs"
+          ],
+          "dependencies": ["common/types"]
+        },
+        "transaction": {
+          "description": "Quản lý giao dịch",
+          "files": [
+            "src/**/transaction.rs",
+            "src/**/transaction/**/*.rs",
+            "src/**/tx_signer.rs",
+            "src/**/tx_validator.rs"
+          ],
+          "dependencies": ["common/types", "common/models"]
+        },
+        "signature": {
+          "description": "Xử lý chữ ký",
+          "files": [
+            "src/**/signature.rs",
+            "src/**/signature/**/*.rs",
+            "src/**/signature_verifier.rs",
+            "src/**/signature_generator.rs"
+          ],
+          "dependencies": ["common/security", "common/types"]
+        },
+        "keystore": {
+          "description": "Quản lý keystore",
+          "files": [
+            "src/**/keystore.rs",
+            "src/**/keystore/**/*.rs",
+            "src/**/keystore_manager.rs",
+            "src/**/keystore_encryption.rs"
+          ],
+          "dependencies": ["common/security", "common/types"]
+        },
+        "mnemonic": {
+          "description": "Xử lý mnemonic",
+          "files": [
+            "src/**/mnemonic.rs",
+            "src/**/mnemonic/**/*.rs",
+            "src/**/mnemonic_generator.rs",
+            "src/**/mnemonic_validator.rs"
+          ],
+          "dependencies": ["common/security", "common/types"]
+        },
+        "private_key": {
+          "description": "Quản lý private key",
+          "files": [
+            "src/**/private_key.rs",
+            "src/**/private_key/**/*.rs",
+            "src/**/private_key_manager.rs",
+            "src/**/private_key_encryption.rs"
+          ],
+          "dependencies": ["common/security", "common/types"]
+        },
+        "public_key": {
+          "description": "Quản lý public key",
+          "files": [
+            "src/**/public_key.rs",
+            "src/**/public_key/**/*.rs",
+            "src/**/public_key_manager.rs",
+            "src/**/public_key_validator.rs"
+          ],
+          "dependencies": ["common/security", "common/types"]
+        },
+        "seed": {
+          "description": "Quản lý seed",
+          "files": [
+            "src/**/seed.rs",
+            "src/**/seed/**/*.rs",
+            "src/**/seed_generator.rs",
+            "src/**/seed_validator.rs"
+          ],
+          "dependencies": ["common/security", "common/types"]
+        },
+        "password": {
+          "description": "Xử lý mật khẩu",
+          "files": [
+            "src/**/password.rs",
+            "src/**/password/**/*.rs",
+            "src/**/password_manager.rs",
+            "src/**/password_validator.rs"
+          ],
+          "dependencies": ["common/security"]
+        },
+        "encryption": {
+          "description": "Mã hóa dữ liệu",
+          "files": [
+            "src/**/encryption.rs",
+            "src/**/encryption/**/*.rs",
+            "src/**/encryption_manager.rs",
+            "src/**/encryption_utils.rs"
+          ],
+          "dependencies": ["common/security"]
+        },
+        "decryption": {
+          "description": "Giải mã dữ liệu",
+          "files": [
+            "src/**/decryption.rs",
+            "src/**/decryption/**/*.rs",
+            "src/**/decryption_manager.rs",
+            "src/**/decryption_utils.rs"
+          ],
+          "dependencies": ["common/security"]
+        },
+        "backup": {
+          "description": "Sao lưu dữ liệu",
+          "files": [
+            "src/**/backup.rs",
+            "src/**/backup/**/*.rs",
+            "src/**/backup_manager.rs",
+            "src/**/backup_validator.rs"
+          ],
+          "dependencies": ["common/security"]
+        },
+        "restore": {
+          "description": "Khôi phục dữ liệu",
+          "files": [
+            "src/**/restore.rs",
+            "src/**/restore/**/*.rs",
+            "src/**/restore_manager.rs",
+            "src/**/restore_validator.rs"
+          ],
+          "dependencies": ["common/security"]
+        },
+        "import": {
+          "description": "Nhập dữ liệu",
+          "files": [
+            "src/**/import.rs",
+            "src/**/import/**/*.rs",
+            "src/**/import_manager.rs",
+            "src/**/import_validator.rs"
+          ],
+          "dependencies": ["common/security"]
+        },
+        "export": {
+          "description": "Xuất dữ liệu",
+          "files": [
+            "src/**/export.rs",
+            "src/**/export/**/*.rs",
+            "src/**/export_manager.rs",
+            "src/**/export_validator.rs"
+          ],
+          "dependencies": ["common/security"]
+        },
+        "verify": {
+          "description": "Xác thực dữ liệu",
+          "files": [
+            "src/**/verify.rs",
+            "src/**/verify/**/*.rs",
+            "src/**/verify_manager.rs",
+            "src/**/verify_validator.rs"
+          ],
+          "dependencies": ["common/security"]
+        }
       }
     }
   },
@@ -768,10 +1116,7 @@
             "src/**/farming/**/*.rs",
             "src/**/diamond_token/**/*.rs",
             "src/**/depin/**/*.rs",
-            "src/**/crosschain/**/*.rs",
-            "src/**/abi/**/*.rs",
-            "src/**/marketplace/**/*.rs",
-            "src/**/nft/**/*.rs"
+            "src/**/crosschain/**/*.rs"
           ],
           "dependencies": ["common"]
         },
@@ -798,7 +1143,6 @@
             "src/config.rs",
             "src/api.rs",
             "src/types.rs",
-            "src/auto_tuning.rs", 
             "src/storage.rs",
             "src/rate_limit.rs",
             "src/connection_manager.rs",
@@ -819,10 +1163,12 @@
             "src/trade/token_status.rs",
             "src/trade/mempool.rs",
             "src/trade/gas_optimizer.rs", 
-            "src/trade/MonteEquilibrium.rs",
+            "src/trade/auto_tuning.rs",
+            "src/trade/risk_analyzer.rs",
             "src/trade/transaction.rs",
             "src/trade/profit_models.rs",
             "src/trade/multichain.rs",
+            "src/trade/trade_executor.rs",
             "src/chain_adapters/mod.rs",
             "src/chain_adapters/base.rs",
             "src/chain_adapters/connection_pool.rs",
@@ -846,7 +1192,7 @@
             "src/chain_adapters/ethereum.rs",
             "src/chain_adapters/base_adapter.rs"
           ],
-          "dependencies": ["common", "blockchain", "wallet"]
+          "dependencies": ["common", "blockchain", "wallet", "ai_modules"]
         },
         "network/wasm": {
           "description": "WebAssembly cho giao tiếp mạng",
@@ -880,6 +1226,20 @@
             "src/**/ui.rs"
           ],
           "dependencies": ["network/wasm"]
+        },
+        "ai_modules": {
+          "description": "Các module AI cho phân tích và tối ưu hóa giao dịch",
+          "files": [
+            "monte_carlo.rs",
+            "equilibrium.rs",
+            "mod.rs",
+            "ai_training/mod.rs",
+            "ai_training/realtime/mod.rs",
+            "ai_training/realtime/rl_agent.rs",
+            "ai_training/realtime/sentiment.rs",
+            "ai_training/longtime/**/*.rs"
+          ],
+          "dependencies": ["common"]
         }
       }
     },
@@ -1258,5 +1618,180 @@
       "thread_safety": "Thêm Send + Sync cho trait objects",
       "async_await": "Clone dữ liệu trước khi gọi .await"
     }
+  },
+  
+  "network": {
+    "path": "network",
+    "modules": {
+      "core": {
+        "path": "network/core",
+        "files": [
+          "network/core/mod.rs",
+          "network/core/models.rs",
+          "network/core/error.rs",
+          "network/core/types.rs",
+          "network/core/utils.rs",
+          "network/core/config.rs",
+          "network/core/message.rs"
+        ]
+      },
+      "wasm": {
+        "path": "network/wasm",
+        "files": [
+          "network/wasm/src/lib.rs",
+          "network/wasm/src/analyzer.rs"
+        ]
+      },
+      "storage": {
+        "path": "network/storage",
+        "files": [
+          "network/storage/redis_storage.rs"
+        ]
+      },
+      "slave_node": {
+        "path": "network/slave_node",
+        "files": [
+          "network/slave_node/src/message_queue.rs",
+          "network/slave_node/src/extension_system.rs"
+        ]
+      },
+      "master_node": {
+        "path": "network/master_node",
+        "files": []
+      },
+      "prometheus": {
+        "path": "network/prometheus",
+        "files": [
+          "network/prometheus/prometheus.yml"
+        ]
+      }
+    },
+    "files": [
+      "network/docker-compose.yml",
+      "network/Cargo.toml",
+      "network/mod.rs",
+      "network/redis_service.rs"
+    ]
+  },
+  
+  "snipebot": {
+    "path": "snipebot",
+    "modules": {
+      "core": {
+        "path": "snipebot/src",
+        "files": [
+          "snipebot/src/lib.rs",
+          "snipebot/src/blockchain.rs",
+          "snipebot/src/flashbots.rs",
+          "snipebot/src/main.rs",
+          "snipebot/src/snipebot.rs",
+          "snipebot/src/health_monitor.rs",
+          "snipebot/src/module_manager.rs",
+          "snipebot/src/config.rs",
+          "snipebot/src/types.rs",
+          "snipebot/src/api.rs",
+          "snipebot/src/storage.rs",
+          "snipebot/src/rate_limit.rs",
+          "snipebot/src/connection_manager.rs",
+          "snipebot/src/service.rs",
+          "snipebot/src/abi_utils.rs",
+          "snipebot/src/metric.rs",
+          "snipebot/src/event_bus.rs"
+        ]
+      },
+      "trade": {
+        "path": "snipebot/src/trade",
+        "files": [
+          "snipebot/src/trade/auto_tuning.rs",
+          "snipebot/src/trade/trade_logic.rs",
+          "snipebot/src/trade/risk_analyzer.rs",
+          "snipebot/src/trade/mempool.rs",
+          "snipebot/src/trade/trade_executor.rs",
+          "snipebot/src/trade/token_status.rs",
+          "snipebot/src/trade/gas_optimizer.rs",
+          "snipebot/src/trade/transaction.rs",
+          "snipebot/src/trade/MonteEquilibrium.rs",
+          "snipebot/src/trade/profit_models.rs",
+          "snipebot/src/trade/multichain.rs"
+        ]
+      },
+      "chain_adapters": {
+        "path": "snipebot/src/chain_adapters",
+        "files": [
+          "snipebot/src/chain_adapters/base.rs",
+          "snipebot/src/chain_adapters/connection_pool.rs",
+          "snipebot/src/chain_adapters/retry_policy.rs",
+          "snipebot/src/chain_adapters/trait_adapter.rs",
+          "snipebot/src/chain_adapters/chain_traits.rs",
+          "snipebot/src/chain_adapters/mod.rs",
+          "snipebot/src/chain_adapters/wallet_integration.rs",
+          "snipebot/src/chain_adapters/chain_adapter_impl.rs",
+          "snipebot/src/chain_adapters/configs.rs",
+          "snipebot/src/chain_adapters/error_handler.rs",
+          "snipebot/src/chain_adapters/interfaces.rs",
+          "snipebot/src/chain_adapters/nonce_manager.rs",
+          "snipebot/src/chain_adapters/non_evm_adapter.rs",
+          "snipebot/src/chain_adapters/chain_registry.rs",
+          "snipebot/src/chain_adapters/retry.rs",
+          "snipebot/src/chain_adapters/adapter_registry.rs",
+          "snipebot/src/chain_adapters/eth.rs",
+          "snipebot/src/chain_adapters/monad.rs",
+          "snipebot/src/chain_adapters/avalanche.rs",
+          "snipebot/src/chain_adapters/bsc.rs",
+          "snipebot/src/chain_adapters/ethereum.rs",
+          "snipebot/src/chain_adapters/base_adapter.rs"
+        ]
+      },
+      "utils": {
+        "path": "snipebot/src/utils",
+        "files": [
+          "snipebot/src/utils/format.rs",
+          "snipebot/src/utils/math.rs",
+          "snipebot/src/utils/time.rs",
+          "snipebot/src/utils/mod.rs"
+        ]
+      },
+      "performance": {
+        "path": "snipebot/src/performance",
+        "files": [
+          "snipebot/src/performance/mod.rs"
+        ]
+      }
+    },
+    "files": [
+      "snipebot/Cargo.toml",
+      "snipebot/IMPROVEMENTS.md",
+      "snipebot/Cargo.lock",
+      "snipebot/proto.rs",
+      "snipebot/.env"
+    ]
+  },
+  
+  "wallet": {
+    "path": "wallet",
+    "modules": {
+      "core": {
+        "path": "wallet/src",
+        "files": [
+          "wallet/src/wallet.rs",
+          "wallet/src/secure_storage.rs",
+          "wallet/src/farm.rs",
+          "wallet/src/defi.rs",
+          "wallet/src/lib.rs",
+          "wallet/src/config.rs",
+          "wallet/src/mission.rs",
+          "wallet/src/stake.rs"
+        ]
+      },
+      "controllers": {
+        "path": "wallet/src/controllers",
+        "files": []
+      }
+    },
+    "files": [
+      "wallet/wallet.rs",
+      "wallet/Cargo.toml",
+      "wallet/Cargo.lock"
+    ]
   }
 }

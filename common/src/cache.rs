@@ -37,7 +37,7 @@ pub trait Cache: Send + Sync {
     where 
         K: AsRef<str> + Send + Sync,
         V: for<'de> Deserialize<'de> + Send + Sync + 'static;
-    
+
     /// Lưu giá trị vào cache
     async fn set<K, V>(&self, key: K, value: V, ttl_seconds: u64) -> Result<()>
     where 
@@ -184,7 +184,7 @@ impl Cache for BasicCache {
         if is_expired {
             // Xóa khi đã hết hạn
             let _ = self.remove(&key_str).await;
-            return Ok(None);
+                    return Ok(None);
         }
         
         // Lấy giá trị
@@ -374,7 +374,7 @@ impl Cache for AsyncCache {
                 Err(e) => Err(anyhow!("Không thể phân tích JSON từ cache: {}", e)),
             }
         } else {
-            Ok(None)
+        Ok(None)
         }
     }
     
@@ -420,7 +420,7 @@ impl Cache for AsyncCache {
         
         Ok(())
     }
-    
+
     async fn remove<K>(&self, key: K) -> Result<()>
     where 
         K: AsRef<str> + Send + Sync
@@ -439,11 +439,11 @@ impl Cache for AsyncCache {
         
         Ok(())
     }
-    
+
     async fn clear(&self) -> Result<()> {
         {
             let mut entries = self.entries.lock().await;
-            entries.clear();
+        entries.clear();
         }
         
         {
@@ -549,7 +549,7 @@ pub fn create_json_cache<C: Cache + Send + Sync + 'static>(cache: C) -> JSONCach
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[derive(Debug, Serialize, Deserialize, PartialEq)]
     struct TestStruct {
         id: u32,

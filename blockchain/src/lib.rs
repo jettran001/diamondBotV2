@@ -33,6 +33,7 @@ pub mod farming;
 pub mod diamond_token;
 pub mod depin;
 pub mod crosschain;
+pub mod core;
 
 // Re-export các module chính
 pub use abi::*;
@@ -45,6 +46,7 @@ pub use farming::*;
 pub use diamond_token::*;
 pub use depin::*;
 pub use crosschain::*;
+pub use core::*;
 
 /// Module tests
 #[cfg(test)]

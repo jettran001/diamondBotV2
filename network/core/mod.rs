@@ -1,6 +1,8 @@
 // External imports
 use ethers::types as ethers_types;
 use ethers::types::U256;
+use anyhow::Result;
+use async_trait::async_trait;
 
 // Standard library imports
 use std::net::SocketAddr;
@@ -10,7 +12,7 @@ use std::{
     fmt::{Display, Formatter},
 };
 
-// Internal modules
+// Module declarations
 mod config;
 mod error;
 mod models;
@@ -26,9 +28,6 @@ pub use models::*;
 pub use types::*;
 pub use utils::*;
 pub use server::*;
-
-use anyhow::Result;
-use async_trait::async_trait;
 
 /// Cấu hình mạng
 #[derive(Debug, Clone)]

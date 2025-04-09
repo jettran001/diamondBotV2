@@ -535,7 +535,7 @@ impl<A: ChainAdapter + AsyncChainAdapter + Send + Sync + 'static> TradeManager<A
                     None
                 }
             }
-        } else {
+            } else {
             None
         };
         

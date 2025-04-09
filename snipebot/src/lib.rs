@@ -29,6 +29,9 @@ use common::cache;
 // Thêm common middleware
 use common::middleware;
 
+// Blockchain crate imports
+use diamond_blockchain::core;
+
 // Third party imports
 use anyhow::Result;
 use tracing::{info, warn, error, debug};
@@ -41,7 +44,7 @@ pub mod abi_utils;
 pub mod utils;
 pub mod chain_adapters;
 pub mod wallet;
-pub mod blockchain;
+pub mod blockchain; // Giữ lại facade wrapper để tương thích
 pub mod network;
 pub mod snipebot;
 pub mod middleware; // Giữ lại để tương thích, nhưng deprecated
@@ -62,6 +65,7 @@ pub use {
     utils::*,
     chain_adapters::*,
     wallet::*,
+    // Re-export từ facade wrapper
     blockchain::*,
     network::*,
     snipebot::*,
@@ -70,6 +74,16 @@ pub use {
     error_handling::*,
     api::*,
     risk_analyzer::*
+};
+
+// Re-export từ diamond_blockchain
+pub use diamond_blockchain::core::{
+    BlockchainParams,
+    TokenInfo,
+    ContractInfo,
+    ContractManager,
+    BlockchainService,
+    create_blockchain_service,
 };
 
 // Internal modules
@@ -98,7 +112,6 @@ pub use chain_adapters::{
     AsyncChainAdapter,
     ChainConfig,
     GasInfo,
-    TokenInfo,
     BlockInfo,
     NodeInfo,
 };

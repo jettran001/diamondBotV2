@@ -985,6 +985,10 @@ impl Cache for RedisPubSubCache {
     }
 }
 
+/// Alias cho Cache trait để hỗ trợ tương thích ngược với các phiên bản cũ
+/// Sử dụng định nghĩa này trong các file cũ khi cần
+pub type AsyncCache = dyn Cache;
+
 /// Module tests
 #[cfg(test)]
 mod tests {

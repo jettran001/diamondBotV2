@@ -1,32 +1,28 @@
-// Standard library imports
-use std::sync::Arc;
-use std::time::Duration;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use std::sync::{Mutex, RwLock};
-use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
-use std::collections::VecDeque;
+// External imports
+use ethers::core::types::{Address, H256, U256, U64};
+use ethers::providers::{Http, Provider, Middleware};
 
-// Third party imports
-use anyhow::{Result, anyhow};
-use async_trait::async_trait;
-use ethers::providers::{Provider, Http, Middleware};
-use ethers::types::U64;
-use lazy_static::lazy_static;
-use log::{info, warn};
-use serde::{Serialize, Deserialize};
-use tokio::time::sleep;
-use tracing::{error};
+// Standard library imports
+use std::collections::{VecDeque, HashMap};
+use std::sync::{Arc, Mutex, RwLock};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 // Internal imports
-use crate::chain_adapters::ChainAdapter;
-use crate::gas_optimizer::GasOptimizer;
-use crate::mempool::{MempoolWatcher, MempoolTracker, PendingSwap, SandwichResult};
-use crate::token_status::TokenStatusTracker;
-use crate::utils::RetryConfig;
-use crate::metrics::RETRY_METRICS;
-use crate::MonteEquilibrium::MonteCarloSimulator;
-use crate::types::SandwichPreferredParams;
-use crate::trade_logic::{TradeResult, TradeType};
+use crate::trade::trade_logic::{TradeResult, SandwichResult, SandwichPreferredParams};
+use crate::gas_optimizer::{RetryConfig, GasStrategy, SlippageStrategy};
+
+// AI Modules imports
+use ai_modules::monte_carlo::{MonteCarloEngine, MonteCarloResult, MonteCarloConfig, SimulationRun};
+use ai_modules::equilibrium::{EquilibriumAnalyzer, GameOutcome, Strategy, Player};
+
+// Third party imports
+use anyhow::{Result, anyhow, Context};
+use async_trait::async_trait;
+use log::{info, warn, debug, error};
+use serde::{Serialize, Deserialize};
+use serde_json::Value;
+use tokio::time::sleep;
 
 // Theo dõi thời gian trung bình để hoàn thành block
 static AVG_BLOCK_TIME_MS: AtomicU64 = AtomicU64::new(12000); // Mặc định 12s cho Ethereum
@@ -61,7 +57,8 @@ pub struct AutoTuner {
     network_congestion_level: Arc<AtomicU64>,
     ai_module: Option<Arc<Mutex<dyn AIAnalyzer>>>,
     mempool_tracker: Option<Arc<Mutex<MempoolTracker>>>,
-    monte_equilibrium: Option<Arc<Mutex<MonteCarloSimulator>>>,
+    monte_carlo_engine: Option<Arc<Mutex<MonteCarloEngine>>>,
+    equilibrium_analyzer: Option<Arc<Mutex<EquilibriumAnalyzer>>>,
     runtime_retry_config: Arc<RwLock<RetryConfig>>,
     tuning_config: AutoTuningConfig,
     tuning_stats: AutoTuningStats,
@@ -86,10 +83,10 @@ pub struct AutoTunerConfig {
 impl Default for AutoTunerConfig {
     fn default() -> Self {
         Self {
-            min_results_for_adjustment: 10,
-            max_trade_history: 100,
-            min_ai_accuracy: 0.7,
-            min_sandwich_profit_usd: 0.5,
+            min_results_for_adjustment: 5,
+            max_trade_history: 50,
+            min_ai_accuracy: 0.6,
+            min_sandwich_profit_usd: 5.0,
             min_sandwich_victim_usd: 10.0,
         }
     }
@@ -100,9 +97,9 @@ impl Default for AutoTuningConfig {
         Self {
             enabled: true,
             update_interval: Duration::from_secs(3600), // 1 giờ
-            max_adjustment: 0.2, // Điều chỉnh tối đa 20%
-            min_adjustment: 0.01, // Điều chỉnh tối thiểu 1%
-            learning_rate: 0.05, // Tốc độ học 5%
+            max_adjustment: 0.15, // 15%
+            min_adjustment: 0.01, // 1%
+            learning_rate: 0.05, // 5%
         }
     }
 }
@@ -129,16 +126,17 @@ impl AutoTuner {
         
         Self {
             provider,
-            check_interval: Duration::from_secs(30),
+            check_interval: Duration::from_secs(60),
             last_check: Instant::now(),
             last_block_number: U64::zero(),
             last_block_time: Instant::now(),
-            trade_results: VecDeque::new(),
+            trade_results: VecDeque::with_capacity(50),
             config: AutoTunerConfig::default(),
-            network_congestion_level: Arc::new(NETWORK_CONGESTION_LEVEL),
+            network_congestion_level: Arc::new(AtomicU64::new(50)), // 50% mặc định
             ai_module: None,
             mempool_tracker: None,
-            monte_equilibrium: None,
+            monte_carlo_engine: None,
+            equilibrium_analyzer: None,
             runtime_retry_config: Arc::new(RwLock::new(default_retry_config)),
             tuning_config: AutoTuningConfig::default(),
             tuning_stats: AutoTuningStats::default(),
@@ -459,11 +457,11 @@ impl AutoTuner {
         }
         
         // Điều chỉnh các tham số Monte Carlo nếu có
-        if let Some(monte) = &self.monte_equilibrium {
-            let mut simulator = monte.lock().unwrap();
+        if let Some(monte) = &self.monte_carlo_engine {
+            let mut engine = monte.lock().await;
             
             // Điều chỉnh số lần mô phỏng dựa trên hiệu suất
-            let current_sims = simulator.get_simulation_count();
+            let current_sims = engine.get_simulation_count();
             let performance_factor = performance.min(1.0).max(0.0);
             
             // Nếu hiệu suất cao, giảm số lần mô phỏng để tăng tốc độ
@@ -479,7 +477,7 @@ impl AutoTuner {
             let new_sims = (current_sims as f64 * adjustment_factor) as u32;
             let new_sims = new_sims.min(10000).max(1000); // Giới hạn trong khoảng hợp lý
             
-            simulator.set_simulation_count(new_sims);
+            engine.set_simulation_count(new_sims);
             info!("Đã điều chỉnh số lần mô phỏng Monte Carlo từ {} thành {}", current_sims, new_sims);
         }
         
@@ -517,8 +515,8 @@ impl AutoTuner {
                         let adjusted_params = self.adjust_sandwich_params_based_on_result(last_result).await?;
                         
                         // Gửi đề xuất mới đến Monte Equilibrium
-                        if let Some(monte) = &self.monte_equilibrium {
-                            let mut monte = monte.lock().unwrap();
+                        if let Some(monte) = &self.monte_carlo_engine {
+                            let mut monte = monte.lock().await;
                             
                             // Đặt các tham số ưu tiên dựa trên kết quả trước đó
                             monte.set_preferred_sandwich_params(&adjusted_params).await?;
@@ -646,6 +644,84 @@ impl AutoTuner {
         };
         
         Ok(result)
+    }
+
+    // Cập nhật với Monte Carlo Engine
+    pub fn with_monte_carlo_engine(mut self, engine: Arc<Mutex<MonteCarloEngine>>) -> Self {
+        self.monte_carlo_engine = Some(engine);
+        self
+    }
+    
+    // Cập nhật với Equilibrium Analyzer
+    pub fn with_equilibrium_analyzer(mut self, analyzer: Arc<Mutex<EquilibriumAnalyzer>>) -> Self {
+        self.equilibrium_analyzer = Some(analyzer);
+        self
+    }
+    
+    // Phương thức để chạy phân tích Monte Carlo
+    pub async fn analyze_with_monte_carlo(&self, token_address: &str) -> Result<MonteCarloResult> {
+        if let Some(engine) = &self.monte_carlo_engine {
+            let engine = engine.lock().await;
+            let config = MonteCarloConfig {
+                expected_profit: 50.0, // USD
+                gas_limit: 300000,    // Gas limit
+            };
+            
+            let result = engine.simulate_trade_outcomes(token_address, &config).await?;
+            
+            // Log kết quả
+            info!("Kết quả Monte Carlo cho token {}: success_rate={}, avg_profit={}",
+                token_address, result.success_rate, result.avg_profit);
+                
+            Ok(result)
+        } else {
+            Err(anyhow!("Monte Carlo engine chưa được cấu hình"))
+        }
+    }
+    
+    // Phương thức để chạy phân tích Game Theory/Equilibrium
+    pub async fn analyze_equilibrium(&self, token_address: &str) -> Result<GameOutcome> {
+        if let Some(analyzer) = &self.equilibrium_analyzer {
+            let analyzer = analyzer.lock().await;
+            
+            // Tạo địa chỉ token
+            let token_addr = token_address.parse::<ethers::types::Address>()
+                .map_err(|_| anyhow!("Địa chỉ token không hợp lệ: {}", token_address))?;
+            
+            // Lấy danh sách người chơi (có thể là các địa chỉ đang hoạt động trên token)
+            let players = vec![token_addr];
+            
+            // Phân tích cân bằng
+            let result = analyzer.analyze_equilibrium(token_address, players).await?;
+            
+            info!("Kết quả phân tích cân bằng cho token {}: success={}, profit={}",
+                token_address, result.success, result.profit);
+                
+            Ok(result)
+        } else {
+            Err(anyhow!("Equilibrium analyzer chưa được cấu hình"))
+        }
+    }
+    
+    // Đề xuất chiến lược game cho một người chơi
+    pub async fn suggest_game_strategy(&self, token_address: &str, player_address: &str) -> Result<Strategy> {
+        if let Some(analyzer) = &self.equilibrium_analyzer {
+            let analyzer = analyzer.lock().await;
+            
+            // Phân tích địa chỉ
+            let player_addr = player_address.parse::<ethers::types::Address>()
+                .map_err(|_| anyhow!("Địa chỉ người chơi không hợp lệ: {}", player_address))?;
+            
+            // Đề xuất chiến lược
+            let strategy = analyzer.suggest_strategy(token_address, &player_addr).await?;
+            
+            info!("Chiến lược đề xuất cho người chơi {} trên token {}: {:?}",
+                player_address, token_address, strategy);
+                
+            Ok(strategy)
+        } else {
+            Err(anyhow!("Equilibrium analyzer chưa được cấu hình"))
+        }
     }
 }
 

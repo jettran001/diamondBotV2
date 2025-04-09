@@ -1,96 +1,129 @@
 version: '3.8'
 
 services:
-  snipebot:
-    build: .
-    container_name: snipebot_rust
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./data:/app/data
-      - ./.env:/app/.env
-    depends_on:
-      - redis
-      - mqtt
-      - ipfs
-    networks:
-      - snipebot-network
-    environment:
-      - RUST_LOG=info
-
   redis:
-    image: redis:7
-    container_name: snipebot_redis
-    restart: unless-stopped
+    image: redis:alpine
+    container_name: diamond_redis
     ports:
       - "6379:6379"
     volumes:
-      - redis-data:/data
-    networks:
-      - snipebot-network
-
-  mqtt:
-    image: eclipse-mosquitto:2
-    container_name: snipebot_mqtt
+      - redis_data:/data
     restart: unless-stopped
-    ports:
-      - "1883:1883"
-      - "9001:9001"
-    volumes:
-      - ./mqtt/config:/mosquitto/config
-      - ./mqtt/data:/mosquitto/data
-      - ./mqtt/log:/mosquitto/log
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
-      - snipebot-network
+      - diamond_network
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-diamond}
+      - REDIS_PORT=6379
+      - REDIS_DATABASES=16
+    command: redis-server --requirepass ${REDIS_PASSWORD:-diamond}
 
   ipfs:
     image: ipfs/kubo:latest
-    container_name: snipebot_ipfs
-    restart: unless-stopped
+    container_name: diamond_ipfs
     ports:
       - "4001:4001"
       - "5001:5001"
-      - "8081:8081"
+      - "8081:8080"
     volumes:
-      - ipfs-data:/data/ipfs
+      - ipfs_data:/data/ipfs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ipfs", "id"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
-      - snipebot-network
+      - diamond_network
 
   prometheus:
     image: prom/prometheus:latest
-    container_name: snipebot_prometheus
-    restart: unless-stopped
+    container_name: diamond_prometheus
     ports:
       - "9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus-data:/prometheus
+      - prometheus_data:/prometheus
+    restart: unless-stopped
     networks:
-      - snipebot-network
+      - diamond_network
 
   grafana:
     image: grafana/grafana:latest
-    container_name: snipebot_grafana
-    restart: unless-stopped
+    container_name: diamond_grafana
     ports:
       - "3000:3000"
     volumes:
-      - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - diamond_network
     depends_on:
       - prometheus
+
+  network_master:
+    image: diamond/network_master:latest
+    container_name: diamond_master
+    build:
+      context: .
+      dockerfile: master_node/Dockerfile
+    ports:
+      - "9000:9000"
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - ipfs
     networks:
-      - snipebot-network
+      - diamond_network
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=snipebot
+      - RUST_LOG=info
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-diamond}
+      - MASTER_PORT=9000
+      - QUIC_PORT=9001
+    volumes:
+      - ./master_node/config:/app/config
+      - master_data:/app/data
+
+  network_slave:
+    image: diamond/network_slave:latest
+    container_name: diamond_slave
+    build:
+      context: .
+      dockerfile: slave_node/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - network_master
+      - redis
+    networks:
+      - diamond_network
+    environment:
+      - RUST_LOG=info
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-diamond}
+      - MASTER_URL=quic://network_master:9001
+    volumes:
+      - ./slave_node/config:/app/config
+      - slave_data:/app/data
+    deploy:
+      replicas: 2
 
 networks:
-  snipebot-network:
+  diamond_network:
     driver: bridge
 
 volumes:
-  redis-data:
-  ipfs-data:
-  prometheus-data:
-  grafana-data:
+  redis_data:
+  ipfs_data:
+  prometheus_data:
+  grafana_data:
+  master_data:
+  slave_data:
