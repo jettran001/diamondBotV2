@@ -1,5 +1,3 @@
-# Đã xóa workspace definition từ này để tránh "multiple workspace roots"
-# Dự án network sẽ dùng workspace từ root
 
 [package]
 name = "network"
