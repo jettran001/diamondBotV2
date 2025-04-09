@@ -4,6 +4,7 @@ members = [
     "blockchain",
     "wallet",
     "snipebot",
+    "network",
     "network/wasm",
 ]
 resolver = "2"
