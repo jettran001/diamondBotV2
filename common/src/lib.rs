@@ -39,18 +39,63 @@ pub use cache::*;
 pub use models::*;
 pub use server::*;
 
-// Public re-exports from network crate
-pub use network::core::{
-    NetworkConfig, 
-    NetworkError, 
-    NetworkResult,
-    RPCClient,
-    RPCEndpoint,
-    EndpointStatus,
-    NetworkManager,
-    NetworkState,
-    NetworkStats,
-};
+// Network types defined locally instead of re-exported from network crate
+// to avoid cyclic dependency
+pub mod network_types {
+    pub type NetworkResult<T> = Result<T, String>;
+    
+    #[derive(Debug, Clone)]
+    pub struct NetworkConfig {
+        pub endpoint: String,
+        pub timeout: std::time::Duration,
+    }
+    
+    #[derive(Debug, Clone)]
+    pub enum NetworkError {
+        ConnectionFailed,
+        Timeout,
+        InvalidResponse,
+        Other(String),
+    }
+    
+    #[derive(Debug, Clone)]
+    pub enum EndpointStatus {
+        Online,
+        Offline,
+        Degraded,
+    }
+    
+    pub trait NetworkManager {
+        fn connect(&self) -> NetworkResult<()>;
+        fn disconnect(&self) -> NetworkResult<()>;
+        fn is_connected(&self) -> bool;
+    }
+    
+    #[derive(Debug, Clone, Default)]
+    pub struct NetworkState {
+        pub connected: bool,
+        pub last_ping: Option<std::time::Duration>,
+    }
+    
+    #[derive(Debug, Clone, Default)]
+    pub struct NetworkStats {
+        pub requests_sent: u64,
+        pub responses_received: u64,
+        pub errors: u64,
+    }
+    
+    pub trait RPCClient {
+        fn call(&self, method: &str, params: Vec<serde_json::Value>) -> NetworkResult<serde_json::Value>;
+    }
+    
+    pub trait RPCEndpoint {
+        fn get_status(&self) -> EndpointStatus;
+        fn get_url(&self) -> String;
+    }
+}
+
+// Re-export for backward compatibility
+pub use network_types::*;
 
 #[cfg(test)]
 mod tests {
